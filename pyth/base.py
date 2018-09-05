@@ -80,8 +80,8 @@ class BaseModel(object):
         self.callbacks.on_fit_start()
         for _ in range(epochs):
             for data in dataloader:
-                self.batch_loss = self.compute_loss(data)
                 self.optimizer.zero_grad()
+                self.batch_loss = self.compute_loss(data)
                 self.batch_loss.backward()
                 stop_signal = self.callbacks.before_step()
                 if stop_signal:
@@ -122,18 +122,21 @@ class BaseModel(object):
 
     def compute_loss(self, data):
         '''Example loss function for x,y dataloaders'''
-        x, y = data
-        x = self._x_to_device(x)
-        out = self.net(*x)
-        return self.loss_func(out, y)
+        input, target = data
+        input = self._to_device(input)
+        target = self._to_device(target)
+        out = self.net(*input)
+        if out.__class__ is torch.Tensor:
+            out = [out]
+        return self.loss_func(*out, *target)
     
-    def _x_to_device(self, x):
+    def _to_device(self, x):
         if x.__class__ is torch.Tensor:
             x = [x.to(self.device)]
         else:
             x = [sub.to(self.device) for sub in x]
         return x
-    
+            
     @property
     def loss_func(self):
         return self._loss_func
@@ -144,7 +147,7 @@ class BaseModel(object):
             loss_func = NotImplemented
         self._loss_func = loss_func
     
-    def predict_func_dataloader(self, dataloader, func=None, return_numpy=True, eval_=True, grads=False):
+    def predict_func_dataloader(self, dataloader, func=None, return_numpy=True, eval_=True, grads=False, move_to_cpu=False):
         '''Get func(X) for dataloader.
 
         Parameters:
@@ -155,13 +158,20 @@ class BaseModel(object):
                 and back to train mode after that (only affects dropout and batchnorm).
                 If False, leaves `fun` modes as they are.
             grads: If gradients should be computed.
+            move_to_cpu: For large data set we want to keep as torch.Tensors we need to
+                move them to the cpu.
         '''
+        #########################3
+        # Need to fix this so it understands which part of dataloader is x and y
+        ######################
         if func is None:
             func = self.net_predict
         if eval_:
             func.eval()
         with torch.set_grad_enabled(grads):
-            preds = [func(*self._x_to_device(x)) for x in iter(dataloader)]
+            # preds = [func(*self._to_device(x)) for x in iter(dataloader)]
+            preds = [self._predict_move_between_devices(func, x, return_numpy, move_to_cpu) 
+                     for x in dataloader]
         if eval_:
             func.train()
         
@@ -176,8 +186,17 @@ class BaseModel(object):
             else:
                 return [sub.numpy() for sub in preds]
         return preds
+    
+    def _predict_move_between_devices(self, func, x, return_numpy, move_to_cpu):
+        preds = func(*self._to_device(x))
+        if return_numpy or move_to_cpu:
+            if preds.__class__ is torch.Tensor:
+                preds = preds.cpu()
+            else:
+                return [sub.cpu() for sub in preds]
+        return preds
 
-    def predict_func_tensor(self, x, func=None, batch_size=8224, return_numpy=True, eval_=True, grads=False):
+    def predict_func_tensor(self, x, func=None, batch_size=8224, return_numpy=False, eval_=True, grads=False, move_to_cpu=False):
         '''Get func(X) for a tensor (or list of tensors) x.
 
         Parameters:
@@ -188,10 +207,13 @@ class BaseModel(object):
             eval_: If true, set `fun` in eval mode for prediction
                 and back to train mode after that (only affects dropout and batchnorm).
                 If False, leaves `fun` modes as they are.
+            move_to_cpu: For large data set we want to keep as torch.Tensors we need to
+                move them to the cpu.
         '''
         dataset = data.TensorDataset(*[x])
         dataloader = DataLoaderSlice(dataset, batch_size)
-        return self.predict_func_dataloader(dataloader, func, return_numpy, eval_, grads)
+        return self.predict_func_dataloader(dataloader, func, return_numpy, eval_, grads,
+                                            move_to_cpu)
 
     def predict_func_numpy(self, x, func=None, batch_size=8224, return_numpy=True, eval_=True, grads=False):
         '''Get func(X) for a numpy array x.
@@ -300,3 +322,26 @@ class BaseModel(object):
 
 #     def in_loop(self, data):
 #         pass
+
+class DatasetTuple(data.Dataset):
+    '''Dataset where input and target can be tuples or lists.
+    '''
+    def __init__(self, input, target):
+        self.input = self._check_tuple(input)
+        self.target = self._check_tuple(target)
+    
+    @staticmethod
+    def _check_tuple(x):
+        if x.__class__ not in [tuple, list]:
+            return (x,)
+        return x
+    
+    def __getitem__(self, index):
+        if not hasattr(index, '__iter__'):
+            index = [index]
+        input = [x[index] for x in self.input]
+        target = [x[index] for x in self.target]
+        return input, target
+
+    def __len__(self):
+        return self.target[0].shape[0]
