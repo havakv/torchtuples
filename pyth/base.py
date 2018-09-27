@@ -5,13 +5,11 @@ from collections import OrderedDict
 import numpy as np
 import torch
 from torch import optim
-from torch.utils import data
-# from pycox.callbacks import callbacks as cb
-from pycox.dataloader import DataLoaderSlice
-# from ..dataloader import NumpyTensorDataset, DataLoaderSlice
+from torch.utils.data import TensorDataset
+from .data import DataLoaderSlice, DatasetTuple
 from . import callbacks as cb
 
-class BaseModel(object):
+class Model(object):
     '''Abstract base model.
 
     Parameters:
@@ -210,7 +208,7 @@ class BaseModel(object):
             move_to_cpu: For large data set we want to keep as torch.Tensors we need to
                 move them to the cpu.
         '''
-        dataset = data.TensorDataset(*[x])
+        dataset = TensorDataset(*[x])
         dataloader = DataLoaderSlice(dataset, batch_size)
         return self.predict_func_dataloader(dataloader, func, return_numpy, eval_, grads,
                                             move_to_cpu)
@@ -322,26 +320,3 @@ class BaseModel(object):
 
 #     def in_loop(self, data):
 #         pass
-
-class DatasetTuple(data.Dataset):
-    '''Dataset where input and target can be tuples or lists.
-    '''
-    def __init__(self, input, target):
-        self.input = self._check_tuple(input)
-        self.target = self._check_tuple(target)
-    
-    @staticmethod
-    def _check_tuple(x):
-        if x.__class__ not in [tuple, list]:
-            return (x,)
-        return x
-    
-    def __getitem__(self, index):
-        if not hasattr(index, '__iter__'):
-            index = [index]
-        input = [x[index] for x in self.input]
-        target = [x[index] for x in self.target]
-        return input, target
-
-    def __len__(self):
-        return self.target[0].shape[0]
