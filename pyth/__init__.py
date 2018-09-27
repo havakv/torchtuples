@@ -9,3 +9,6 @@ __version__ = '0.0.0'
 from . import base
 from . import callbacks
 from . import fitnet
+
+from .base import Model
+from .data import DatasetTuple, DataLoaderSlice

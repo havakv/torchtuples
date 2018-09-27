@@ -21,9 +21,9 @@ class Model(object):
             If `int`: used that gpu: torch.device('cuda:<device>').
             If `string`: string is passed to torch.device(`string`).
     '''
-    def __init__(self, net, loss_func=None, optimizer=None, device=None, net_predict=None):
+    def __init__(self, net, loss=None, optimizer=None, device=None, net_predict=None):
         self.net = net
-        self.loss_func = loss_func
+        self.loss = loss
         self.optimizer = optimizer if optimizer else optim.Adam(self.net.parameters())
 
         self.device = self._device_from__init__(device)
@@ -90,7 +90,30 @@ class Model(object):
             if stop_signal:
                 break
         return self.log
-
+    
+    def fit_tensor(self, input, target, batch_size=256, epochs=1, callbacks=None, verbose=True,
+                    num_workers=0):
+        """Fit inputs model with inputs and targets.
+        
+        Arguments:
+            input {tensor or tuple} -- Input (x) passed to net.
+            target {tensor or tuple} -- Target (y) passed to loss function.
+        
+        Keyword Arguments:
+            batch_size {int} -- Elemets in each batch (default: {256})
+            epochs {int} -- Number of epochs (default: {1})
+            callbacks {list} -- list of callbacks (default: {None})
+            verbose {bool} -- Print progress (default: {True})
+            num_workers {int} -- Number of workers used in the dataloader (default: {0})
+        """
+        if input.__class__ is torch.Tensor:
+            input = (input,)
+        if target.__class__ is torch.Tensor:
+            target = (target,)
+        dataset = DatasetTuple(input, target)
+        dataloader = DataLoaderSlice(dataset, batch_size, shuffle=True, num_workers=num_workers)
+        return self.fit_dataloader(dataloader, epochs, callbacks, verbose)
+    
     def score_in_batches(self, dataloader, score_func=None, eval_=True, mean=True):
         '''Score a dataset in batches.
 
@@ -126,7 +149,7 @@ class Model(object):
         out = self.net(*input)
         if out.__class__ is torch.Tensor:
             out = [out]
-        return self.loss_func(*out, *target)
+        return self.loss(*out, *target)
     
     def _to_device(self, x):
         if x.__class__ is torch.Tensor:
@@ -136,14 +159,14 @@ class Model(object):
         return x
             
     @property
-    def loss_func(self):
-        return self._loss_func
+    def loss(self):
+        return self._loss
     
-    @loss_func.setter
-    def loss_func(self, loss_func):
-        if loss_func is None:
-            loss_func = NotImplemented
-        self._loss_func = loss_func
+    @loss.setter
+    def loss(self, loss):
+        if loss is None:
+            loss = NotImplemented
+        self._loss = loss
     
     def predict_func_dataloader(self, dataloader, func=None, return_numpy=True, eval_=True, grads=False, move_to_cpu=False):
         '''Get func(X) for dataloader.
