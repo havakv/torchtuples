@@ -93,7 +93,7 @@ class Model(object):
     
     def fit_tensor(self, input, target, batch_size=256, epochs=1, callbacks=None, verbose=True,
                     num_workers=0):
-        """Fit inputs model with inputs and targets.
+        """Fit  model with inputs and targets.
         
         Arguments:
             input {tensor or tuple} -- Input (x) passed to net.
@@ -106,15 +106,62 @@ class Model(object):
             verbose {bool} -- Print progress (default: {True})
             num_workers {int} -- Number of workers used in the dataloader (default: {0})
         """
-        if input.__class__ is torch.Tensor:
-            input = (input,)
-        if target.__class__ is torch.Tensor:
-            target = (target,)
-        dataset = DatasetTuple(input, target)
-        dataloader = DataLoaderSlice(dataset, batch_size, shuffle=True, num_workers=num_workers)
+        # if input.__class__ is torch.Tensor:
+        #     input = (input,)
+        # if target.__class__ is torch.Tensor:
+        #     target = (target,)
+        # dataset = DatasetTuple(input, target)
+        # dataloader = DataLoaderSlice(dataset, batch_size, shuffle=True, num_workers=num_workers)
+        dataloader = tensor_to_dataloader(input, target, batch_size, shuffle=True,
+                                          num_workers=num_workers)
         return self.fit_dataloader(dataloader, epochs, callbacks, verbose)
+
+    def fit_numpy(self, input, target, batch_size=256, epochs=1, callbacks=None, verbose=True,
+                  num_workers=0):
+        """Fit model with inputs and targets.
+        
+        Arguments:
+            input {array or tuple} -- Input (x) passed to net.
+            target {array or tuple} -- Target (y) passed to loss function.
+        
+        Keyword Arguments:
+            batch_size {int} -- Elemets in each batch (default: {256})
+            epochs {int} -- Number of epochs (default: {1})
+            callbacks {list} -- list of callbacks (default: {None})
+            verbose {bool} -- Print progress (default: {True})
+            num_workers {int} -- Number of workers used in the dataloader (default: {0})
+        """
+        input = numpy_to_tensor(input)
+        target = numpy_to_tensor(target)
+        return self.fit_tensor(input, target, batch_size, epochs, callbacks, verbose, num_workers)
     
-    def score_in_batches(self, dataloader, score_func=None, eval_=True, mean=True):
+    def score_in_batches(self, data, score_func=None, batch_size=1028, eval_=True, mean=True,
+                         num_workers=0, shuffle=False):
+        if data.__class__ not in (list, tuple):
+            return self.score_in_batches_dataloader(data, score_func, eval_, mean)
+        input, target = data
+        object_class = _nested_unpack_class(input)
+        if object_class is torch.Tensor:
+            return self.score_in_batches_tensor(input, target, score_func, batch_size,
+                                                eval_, mean, num_workers, shuffle)
+        elif object_class is np.ndarray:
+            return self.score_in_batches_numpy(input, target, score_func, batch_size,
+                                                eval_, mean, num_workers, shuffle)
+        raise ValueError("Need `data` to be a dataloader or contain np.arrays or torch tensors.")
+    
+    def score_in_batches_numpy(self, input, target, score_func=None, batch_size=1028,
+                                eval_=True, mean=True, num_workers=0, shuffle=False):
+        input, target = numpy_to_tensor((input, target))
+        return self.score_in_batches_tensor(input, target,score_func, batch_size,
+                                            eval_, mean, num_workers, shuffle)
+
+    def score_in_batches_tensor(self, input, target, score_func=None, batch_size=1028,
+                                eval_=True, mean=True, num_workers=0, shuffle=False):
+        dataloader = tensor_to_dataloader(input, target, batch_size, shuffle=shuffle,
+                                          num_workers=num_workers)
+        return self.score_in_batches_dataloader(dataloader, score_func, eval_, mean)
+    
+    def score_in_batches_dataloader(self, dataloader, score_func=None, eval_=True, mean=True):
         '''Score a dataset in batches.
 
         Parameters:
@@ -269,6 +316,27 @@ class Model(object):
             **kwargs: Arguments passed to torch.load method.
         '''
         self.net.load_state_dict(torch.load(path, **kwargs))
+
+
+def _nested_unpack_class(iterable):
+    first = iterable[0]
+    if first.__class__ in (list, tuple):
+        return _nested_unpack_class(first)
+    return first.__class__
+
+def numpy_to_tensor(x):
+    if x.__class__ in [list, tuple]:
+        return [numpy_to_tensor(sub) for sub in x]
+    return torch.from_numpy(x).float()
+    
+def tensor_to_dataloader(input, target, batch_size, shuffle, num_workers):
+    if input.__class__ is torch.Tensor:
+        input = (input,)
+    if target.__class__ is torch.Tensor:
+        target = (target,)
+    dataset = DatasetTuple(input, target)
+    dataloader = DataLoaderSlice(dataset, batch_size, shuffle=shuffle, num_workers=num_workers)
+    return dataloader
 
 #     # def _predict_func_numpy(self, func, X, batch_size=8224, return_numpy=True, eval_=True):
 #     #     '''Get func(X) for a numpy array X.

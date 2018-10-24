@@ -306,17 +306,19 @@ class MonitorBase(Callback):
                 .set_index('epoch'))
 
 class MonitorLoss(MonitorBase):
-    def __init__(self, dataloader, eval_=True, per_epoch=1):
+    def __init__(self, data, per_epoch=1, **kwargs):
         monitor_funcs = {'loss': self._identity}
         super().__init__(monitor_funcs, per_epoch)
-        self.dataloader = dataloader
-        self.eval_ = eval_
+        self.data = data
+        assert 'score_func' not in kwargs, 'You cannot give `score_func` to kwargs here.'
+        self.kwargs = kwargs
+        # self.eval_ = eval_
     
     def _identity(self, score):
         return score
     
     def get_score_args(self):
-        return [self.model.score_in_batches(self.dataloader, eval_=self.eval_)]
+        return [self.model.score_in_batches(self.data, **self.kwargs)]
 
 
 class MonitorTrainLoss(MonitorBase):
