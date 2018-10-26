@@ -242,10 +242,8 @@ class DatasetTuple(Dataset):
         self.data = data if data.__class__ in (list, tuple) else (data,)
 
     def __getitem__(self, index):
-        # print(f"Index {index}\n class: {index.__class__}")
         if not hasattr(index, '__iter__'):
             index = [index]
-        # sub = [x[index] for x in self.data]
         return get_subset_nested(self.data, index)
 
     def __len__(self):
@@ -259,36 +257,5 @@ def _len_nested(data):
 
 def get_subset_nested(data, index):
     if data.__class__ in (list, tuple):
-        return [get_subset_nested(x, index) for x in data]
+        return tuple(get_subset_nested(x, index) for x in data)
     return data[index]
-
-
-# class DatasetTuple(Dataset):
-#     """Dataset where input and target can be tuples.
-    
-#     Arguments:
-#         input {tuple or list} -- What is passed to the network (list of x tensors.)
-#         target {tuple or list} -- Label information passed to the loss function
-#             (list of y tensors)
-#     """
-#     def __init__(self, input, target):
-#         raise NotImplementedError('change this')
-
-#         self.input = self._check_tuple(input)
-#         self.target = self._check_tuple(target)
-    
-#     @staticmethod
-#     def _check_tuple(x):
-#         if x.__class__ not in [tuple, list]:
-#             return (x,)
-#         return x
-    
-#     def __getitem__(self, index):
-#         if not hasattr(index, '__iter__'):
-#             index = [index]
-#         input = [x[index] for x in self.input]
-#         target = [x[index] for x in self.target]
-#         return input, target
-
-#     def __len__(self):
-#         return self.target[0].shape[0]

@@ -56,14 +56,6 @@ class Model(object):
     def optimizer(self, optimizer):
         self._optimizer = optimizer
     
-    @property
-    def net_predict(self):
-        return self._net_predict
-    
-    @net_predict.setter
-    def net_predict(self, net_predict):
-        self._net_predict = net_predict
-    
     def _setup_train_info(self, dataloader, verbose, callbacks):
         self.fit_info = {'batches_per_epoch': len(dataloader)}
 
@@ -77,9 +69,9 @@ class Model(object):
         self._setup_train_info(dataloader, verbose, callbacks)
         self.callbacks.on_fit_start()
         for _ in range(epochs):
-            for data in dataloader:
+            for input, target in dataloader:
                 self.optimizer.zero_grad()
-                self.batch_loss = self.compute_loss(data)
+                self.batch_loss = self.compute_loss(input, target)
                 self.batch_loss.backward()
                 stop_signal = self.callbacks.before_step()
                 if stop_signal:
@@ -176,11 +168,11 @@ class Model(object):
             self.net.eval()
         batch_scores = []
         with torch.no_grad():
-            for data in dataloader:
+            for input, target in dataloader:
                 if score_func is None:
-                    score = self.compute_loss(data)
+                    score = self.compute_loss(input, target)
                 else:
-                    score = score_func(self, data)
+                    score = score_func(self, input, target)
                 batch_scores.append(score)
         if eval_:
             self.net.train()
@@ -189,34 +181,17 @@ class Model(object):
             return np.mean(batch_scores)
         return batch_scores
 
-    def compute_loss(self, data):
-        '''Example loss function for x,y dataloaders'''
-        input, target = data
+    def compute_loss(self, input, target):
+        # input, target = data
         input = self._to_device(input)
         target = self._to_device(target)
         out = self.net(*input)
-        if out.__class__ is torch.Tensor:
-            out = [out]
+        out = tuple_if_tensor(out)
         return self.loss(*out, *target)
     
     def _to_device(self, data):
         data = to_device(data, self.device)
         return tuple_if_tensor(data)
-        # if x.__class__ is torch.Tensor:
-        #     x = [x.to(self.device)]
-        # else:
-        #     x = [sub.to(self.device) for sub in x]
-        # return x
-            
-    # @property
-    # def loss(self):
-    #     return self._loss
-    
-    # @loss.setter
-    # def loss(self, loss):
-    #     if loss is None:
-    #         loss = NotImplemented
-    #     self._loss = loss
     
     def predict_func_dataloader(self, dataloader, func=None, return_numpy=True, eval_=True, grads=False, move_to_cpu=False):
         '''Get func(X) for dataloader.
@@ -240,7 +215,6 @@ class Model(object):
         if eval_:
             func.eval()
         with torch.set_grad_enabled(grads):
-            # preds = [func(*self._to_device(x)) for x in iter(dataloader)]
             preds = [self._predict_move_between_devices(func, x, return_numpy, move_to_cpu) 
                      for x in dataloader]
         if eval_:
@@ -332,14 +306,10 @@ def class_of(data):
     if classes.count(classes[0]) != len(classes):
         raise ValueError("All objects in 'data' doest have the same class.")
     return classes[0]
-    # first = iterable[0]
-    # if first.__class__ in (list, tuple):
-    #     return _nested_unpack_class(first)
-    # return first.__class__
 
 def numpy_to_tensor(data):
-    if data.__class__ in [list, tuple]:
-        return [numpy_to_tensor(sub) for sub in data]
+    if data.__class__ in (list, tuple):
+        return tuple(numpy_to_tensor(sub) for sub in data)
     return torch.from_numpy(data).float()
     
 def tensor_to_dataloader(data, batch_size, shuffle, num_workers):
@@ -366,12 +336,3 @@ def tuple_if_tensor(data):
     if data.__class__ is torch.Tensor:
         data = (data,)
     return data
-
-# def old_tensor_to_dataloader(input, target, batch_size, shuffle, num_workers):
-#     if input.__class__ is torch.Tensor:
-#         input = (input,)
-#     if target.__class__ is torch.Tensor:
-#         target = (target,)
-#     dataset = DatasetTuple(input, target)
-#     dataloader = DataLoaderSlice(dataset, batch_size, shuffle=shuffle, num_workers=num_workers)
-#     return dataloader
