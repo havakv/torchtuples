@@ -1,27 +1,11 @@
 import math
+import numpy as np
 import torch
-from torch.optim import Optimizer
+from torch.optim import Optimizer, Adam
 # from .callbacks import Callback
 
-torch.optim.lr_scheduler.CosineAnnealingLR
-
 class LRSchedulerBatch(object):
-    pass
-
-class BatchCosineAnnealingLR:
-    """Cosine anealing of learning rate (per batch update and not per epoch as in original paper.)
-    
-    Arguments:
-        optimizer {torch.optim.Optimizer} -- Torch optimizer.
-    
-    Keyword Arguments:
-        cycle_len {int} -- Length of cycle (T_i in paper) (default: {1})
-        cycle_multiplier {int} -- Multiplier of cycle_len after each finished cycle (default: {2})
-        eta_min {int} -- Minimul learing rate muliplier (will not actually be zero) (default: {0})
-        last_batch {int} -- Index of last batch (default: {-1})
-    """
-    def __init__(self, optimizer, cycle_len=1, cycle_multiplier=2, eta_min=0, batch_iter=-1,
-                 keep_etas=False):
+    def __init__(self, optimizer, batch_iter=-1):
         if not isinstance(optimizer, Optimizer):
             raise TypeError(f'{type(optimizer).__name__} is not an Optimizer')
         self.optimizer = optimizer
@@ -31,42 +15,9 @@ class BatchCosineAnnealingLR:
         else:
             for i, group in enumerate(optimizer.param_groups):
                 if 'initial_lr' not in group:
-                    raise KeyError("param 'initial_lr' is not specified "
-                                   "in param_groups[{}] when resuming an optimizer".format(i))
-        self.cycle_len = cycle_len
-        self.cycle_multiplier = cycle_multiplier
-        self.eta_min = eta_min
-        self.batch_iter = batch_iter
-        self.keep_etas = keep_etas
-        self.etas = []
-    
-    @property
-    def cycle_len(self):
-        return self._cycle_len
-    
-    @cycle_len.setter
-    def cycle_len(self, cycle_len):
-        if cycle_len < 1:
-            raise ValueError(f"Need cycle_len >= 1.")
-        assert type(cycle_len) is int
-        self._cycle_len = cycle_len
-
-    def get_lr(self):
-        eta = (self.eta_min + 0.5 * (1. - self.eta_min)
-               * (1 + math.cos(math.pi * self.batch_iter / self.cycle_len)))
-        if self.keep_etas:
-            self.etas.append(eta)
-        return [eta * group['initial_lr'] for group in self.optimizer.param_groups]
-
-    def step(self, score=None, batch_iter=None):
-        if batch_iter is None:
-            batch_iter = self.batch_iter + 1
-        self.batch_iter = batch_iter
-        if self.batch_iter == self.cycle_len:
-            self.batch_iter = 0
-            self.cycle_len *= self.cycle_multiplier
-        for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
-            param_group['lr'] = lr
+                    raise KeyError(f"""param 'initial_lr' is not specified
+                                   in param_groups[{i}] when resuming an optimizer""")
+        self.batch_iter = batch_iter + (batch_iter == -1)
 
     def state_dict(self):
         """Returns the state of the scheduler as a :class:`dict`.
@@ -84,8 +35,98 @@ class BatchCosineAnnealingLR:
                 from a call to :meth:`state_dict`.
         """
         self.__dict__.update(state_dict)
+    
+    def get_lr(self):
+        raise NotImplementedError
+
+    def step(self, score=None, batch_iter=None):
+        if batch_iter is not None:
+            self.batch_iter = batch_iter
+        for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
+            param_group['lr'] = lr
+        self.batch_iter += 1
+
+class LRFinderScheduler(LRSchedulerBatch):
+    def __init__(self, optimizer, lr_min=1e-7, lr_max=10., n_steps=100):
+        super().__init__(optimizer, batch_iter=-1)
+        ratio = np.power(lr_max/lr_min, 1/(n_steps-1))
+        self.lrs = lr_min * np.power(ratio, np.arange(n_steps))
+    
+    def get_lr(self):
+        return [self.lrs[self.batch_iter]] * len(self.optimizer.param_groups)
+        
+
+class BatchCosineAnnealingLR(LRSchedulerBatch):
+    """Cosine anealing of learning rate (per batch update and not per epoch as in original paper.)
+    
+    Arguments:
+        optimizer {torch.optim.Optimizer} -- Torch optimizer.
+    
+    Keyword Arguments:
+        cycle_len {int} -- Length of cycle (T_i in paper) (default: {1})
+        cycle_multiplier {int} -- Multiplier of cycle_len after each finished cycle (default: {2})
+        eta_min {int} -- Minimul learing rate muliplier (will not actually be zero) (default: {0})
+        last_batch {int} -- Index of last batch (default: {-1})
+    """
+    def __init__(self, optimizer, cycle_len=1, cycle_multiplier=2, eta_min=0, batch_iter=-1,
+                 keep_etas=False):
+        super().__init__(optimizer, batch_iter)
+        self.cycle_len = cycle_len
+        self.cycle_multiplier = cycle_multiplier
+        self.eta_min = eta_min
+        self.keep_etas = keep_etas
+        self.etas = []
+        self.cycle_iter = self.batch_iter % self.cycle_len
+    
+    @property
+    def cycle_len(self):
+        return self._cycle_len
+    
+    @cycle_len.setter
+    def cycle_len(self, cycle_len):
+        if cycle_len < 1:
+            raise ValueError(f"Need cycle_len >= 1.")
+        assert type(cycle_len) is int
+        self._cycle_len = cycle_len
+
+    def get_lr(self):
+        eta = (self.eta_min + 0.5 * (1. - self.eta_min)
+               * (1 + math.cos(math.pi * self.cycle_iter / self.cycle_len)))
+            #    * (1 + math.cos(math.pi * (self.batch_iter % self.cycle_len) / self.cycle_len)))
+        if self.keep_etas:
+            self.etas.append(eta)
+        return [eta * group['initial_lr'] for group in self.optimizer.param_groups]
+
+    def step(self, score=None, batch_iter=None):
+        super().step(score, batch_iter)
+        self.cycle_iter += 1
+        if self.cycle_iter == self.cycle_len:
+            self.cycle_iter = 0
+            self.cycle_len *= self.cycle_multiplier
 
 
+class AdamW(Adam):
+    """Not a full implementation of AdamW, but just calls reglar Adam
+    with other defaults:
+        - beta2 = 0.99.
+        - weight_decay = 0 (this is L2 regularization and not weight decay).
+        - amsgra=False.
+    
+    Use callback WeightDecay to get weight decay.
+    
+    Arguments:
+        params {iterable} -- Iterable of parameters to optimize, or dicts
+            defining parameter groups.
+    
+    Keyword Arguments:
+        lr {int} -- Learning rate (default: {1e-3})
+        betas {tuple} -- Coefficients used for computing running averages
+            of gradient and its square  (default: {(0.9, 0.99)})
+        eps {[type]} -- Term added to the denominator to improve
+            numerical stability (default: {1e-8})
+    """
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.99), eps=1e-8):
+        super().__init__(params, lr, betas, eps, weight_decay=0, amsgrad=False)
 
 
 

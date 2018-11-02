@@ -12,6 +12,7 @@ import torch
 from torch import optim
 # from torch.autograd import Variable
 # from .utils import to_cuda
+from .optim import LRFinderScheduler
 
 
 class CallbacksList(object):
@@ -31,23 +32,35 @@ class CallbacksList(object):
             c.give_model(model)
 
     def on_fit_start(self):
+        stop_signal = False
         for c in self.callbacks:
-            c.on_fit_start()
+            stop = c.on_fit_start()
+            stop = stop if stop else False
+            stop_signal += stop
+        return stop_signal
 
     def before_step(self):
         stop_signal = False
         for c in self.callbacks:
-            stop_signal += c.before_step()
+            stop = c.before_step()
+            stop = stop if stop else False
+            stop_signal += stop
         return stop_signal
 
     def on_batch_end(self):
+        stop_signal = False
         for c in self.callbacks:
-            c.on_batch_end()
+            stop = c.on_batch_end()
+            stop = stop if stop else False
+            stop_signal += stop
+        return stop_signal
 
     def on_epoch_end(self):
         stop_signal = False
         for c in self.callbacks:
-            stop_signal += c.on_epoch_end()
+            stop = c.on_epoch_end()
+            stop = stop if stop else False
+            stop_signal += stop
         return stop_signal
 
 
@@ -429,6 +442,7 @@ class ClipGradNorm(Callback):
         stop_signal = False
         return stop_signal
 
+
 class LRScheduler(Callback):
     '''Wrapper for pytorch.optim.lr_scheduler objects.
 
@@ -462,8 +476,57 @@ class LRSchedulerBatch(Callback):
         return False
 
 
-class LRFinder(LRSchedulerBatch):
-    pass
+class LRFinder(Callback):
+    def __init__(self, lr_min=1e-7, lr_max=10., n_steps=100, tolerance=10.):
+        self.lr_min = lr_min
+        self.lr_max = lr_max
+        self.n_steps = n_steps
+        self.lowest_loss = np.inf
+        self.tolerance = tolerance
+
+    def on_fit_start(self):
+        self.batch_loss = []
+        self.scheduler = LRFinderScheduler(self.model.optimizer, self.lr_min,
+                                           self.lr_max, self.n_steps)
+    
+    def on_batch_end(self):
+        self.scheduler.step()
+        batch_loss = self.model.batch_loss.item()
+        self.batch_loss.append(batch_loss)
+        if (batch_loss / self.lowest_loss) > self.tolerance:
+            return True
+        self.lowest_loss = min(self.lowest_loss, batch_loss)
+        return False
+    
+    def to_pandas(self, smoothed=0):
+        res = pd.DataFrame(dict(train_loss=self.batch_loss),
+                           index=self.scheduler.lrs[:len(self.batch_loss)])
+        if smoothed:
+            res = res.apply(_smooth_curve, beta=smoothed)
+        return res
+    
+    def plot(self, logx=True, smoothed=0.98, **kwargs):
+        res = self.to_pandas(smoothed)
+        ylabel = 'bach_loss'
+        if smoothed:
+            # res = res.apply(_smooth_curve, beta=smoothed)
+            ylabel = ylabel + ' (smoothed)'
+        ax = res.plot(logx=True, **kwargs)
+        ax.set_xlabel('lr')
+        ax.set_ylabel(ylabel)
+        return ax
+    
+    def get_best_lr(self):
+        return self.to_pandas(smoothed=0.98)['train_loss'].sort_values().index[0] / 10
+
+def _smooth_curve(vals, beta=0.98):
+    """From fastai"""
+    avg_val = 0
+    smoothed = []
+    for (i,v) in enumerate(vals):
+        avg_val = beta * avg_val + (1-beta) * v
+        smoothed.append(avg_val/(1-beta**(i+1)))
+    return smoothed
 
 
 class WeightDecay(Callback):
@@ -477,7 +540,7 @@ class WeightDecay(Callback):
     def before_step(self):
         # Weight decay out of the loss. After the gradient computation but before the step.
         weight_decay = self.weight_decay
-        for group in self.optimizer.param_groups:
+        for group in self.model.optimizer.param_groups:
             lr = group['lr']
             alpha = group.get('initial_lr', 1.)
             eta = lr / alpha

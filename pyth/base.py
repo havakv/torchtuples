@@ -67,18 +67,23 @@ class Model(object):
 
     def fit_dataloader(self, dataloader, epochs=1, callbacks=None, verbose=True):
         self._setup_train_info(dataloader, verbose, callbacks)
-        self.callbacks.on_fit_start()
+        stop_signal = self.callbacks.on_fit_start()
+        if stop_signal:
+            raise RuntimeError('Got stop_signal from callback before fit starts')
         for _ in range(epochs):
             for input, target in dataloader:
                 self.optimizer.zero_grad()
                 self.batch_loss = self.compute_loss(input, target)
                 self.batch_loss.backward()
-                stop_signal = self.callbacks.before_step()
+                stop_signal += self.callbacks.before_step()
                 if stop_signal:
                     raise RuntimeError('Stop signal in before_step().')
                 self.optimizer.step()
-                self.callbacks.on_batch_end()
-            stop_signal = self.callbacks.on_epoch_end()
+                stop_signal += self.callbacks.on_batch_end()
+                if stop_signal:
+                    break
+            else:
+                stop_signal += self.callbacks.on_epoch_end()
             if stop_signal:
                 break
         return self.log
