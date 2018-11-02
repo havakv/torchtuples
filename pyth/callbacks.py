@@ -61,6 +61,7 @@ class Callback(object):
         pass
 
     def before_step(self):
+        """Called after loss.backward(), but before optim.step()."""
         stop_signal = False
         return stop_signal
 
@@ -247,7 +248,7 @@ class EarlyStopping(Callback):
 class MonitorBase(Callback):
     '''Abstract class for monitoring metrics during training progress.
 
-    Need to implement 'get_score_args' function to make it work.
+    Need to implement 'get_score_inputs' function to make it work.
     See MonitorXy for an example.
 
     Parameters:
@@ -256,7 +257,10 @@ class MonitorBase(Callback):
             The function takes argumess (df, preds) and should return a score.
         batch_size: Batch size used for calculating the scores.
     '''
-    def __init__(self, monitor_funcs, per_epoch=1):
+    def __init__(self, monitor_funcs, per_epoch=1, per_batch=False):
+        if per_batch:
+            raise NotImplementedError('Not implemented for per_batch.')
+            self.batch = 0
         if monitor_funcs.__class__ is dict:
             self.monitor_names = list(monitor_funcs.keys())
             self.monitor_funcs = monitor_funcs.values()
@@ -273,21 +277,22 @@ class MonitorBase(Callback):
         self.scores = [[] for _ in self.monitor_funcs]
         self.epochs = []
 
-    def get_score_args(self):
+    def get_score_inputs(self):
         '''This function should create arguments to the monitor function.
         Typically it can return a tuple with (y_true, preds), to calculate e.g. auc.
         '''
         # raise NotImplementedError('Need to implement this method!')
-        return [NotImplemented]
-
+        # return [NotImplemented]
+        pass
+    
     def on_epoch_end(self):
         if self.epoch % self.per_epoch != 0:
             self.epoch += 1
             return False
 
-        score_args = self.get_score_args()
+        score_inputs = self.get_score_inputs()
         for score_list, mon_func in zip(self.scores, self.monitor_funcs):
-            score_list.append(mon_func(*score_args))
+            score_list.append(mon_func(*score_inputs))
 
         self.epochs.append(self.epoch)
         self.epoch += 1
@@ -317,7 +322,7 @@ class MonitorLoss(MonitorBase):
     def _identity(self, score):
         return score
     
-    def get_score_args(self):
+    def get_score_inputs(self):
         return [self.model.score_in_batches(self.data, **self.kwargs)]
 
 
@@ -335,7 +340,7 @@ class MonitorTrainLoss(MonitorBase):
         loss = np.mean(self.batch_loss)
         return loss
 
-    def get_score_args(self):
+    def get_score_inputs(self):
         return None, None
 
     def on_fit_start(self):
@@ -370,7 +375,7 @@ class MonitorXy(MonitorBase):
         self.kwargs = kwargs
         super().__init__(monitor_funcs, per_epoch, batch_size)
 
-    def get_score_args(self):
+    def get_score_inputs(self):
         '''This function should create arguments to the monitor function.
         Typically it can return a tuple with (y_true, preds), to calculate e.g. auc.
         '''
@@ -441,4 +446,43 @@ class LRScheduler(Callback):
         self.scheduler.step(score)
         stop_signal = False
         return stop_signal
+
+
+class LRSchedulerBatch(Callback):
+    '''Wrapper for schedulers
+
+    Parameters:
+        scheduler: A scheduler, e.g. BatchCosineAnnealingLR()
+    '''
+    def __init__(self, scheduler):
+        self.scheduler = scheduler
     
+    def on_batch_end(self):
+        self.scheduler.step()
+        return False
+
+
+class LRFinder(LRSchedulerBatch):
+    pass
+
+
+class WeightDecay(Callback):
+    """Same weight decay for all groups in the optimizer."""
+    def __init__(self, weight_decay, normalized=False):
+        self.weight_decay = weight_decay
+        self.normalized = normalized
+        if self.normalized:
+            raise NotImplementedError()
+    
+    def before_step(self):
+        # Weight decay out of the loss. After the gradient computation but before the step.
+        weight_decay = self.weight_decay
+        for group in self.optimizer.param_groups:
+            lr = group['lr']
+            alpha = group.get('initial_lr', 1.)
+            eta = lr / alpha
+            for p in group['params']:
+                if p.grad is not None:
+                    p.data = p.data.add(-weight_decay * eta, p.data)
+                    # p.data.mul_(1 - weight_decay * eta)
+        return False

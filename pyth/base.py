@@ -310,7 +310,7 @@ def class_of(data):
 def numpy_to_tensor(data):
     if data.__class__ in (list, tuple):
         return tuple(numpy_to_tensor(sub) for sub in data)
-    return torch.from_numpy(data).float()
+    return torch.from_numpy(data)#.float()
     
 def tensor_to_dataloader(data, batch_size, shuffle, num_workers):
     if class_of(data) is not torch.Tensor:
