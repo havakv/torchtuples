@@ -4,6 +4,7 @@ Callbacks.
 import warnings
 import time
 from collections import OrderedDict
+import math
 import numpy as np
 import pandas as pd
 # import matplotlib.pyplot as plt
@@ -12,7 +13,8 @@ import torch
 from torch import optim
 # from torch.autograd import Variable
 # from .utils import to_cuda
-from .optim import LRFinderScheduler
+from .optim import AdamW
+from . import lr_scheduler 
 
 
 class CallbacksList(object):
@@ -23,11 +25,17 @@ class CallbacksList(object):
     '''
     def __init__(self, callbacks=None):
         self.callbacks = callbacks if callbacks else []
+        self.model = None
 
-    def add(self, callback):
-        self.callbacks.append(callback)
+    def append(self, callback):
+        if self.model is None:
+            raise RuntimeError("Can only call append after the callback has received the model.")
+        callback.give_model(self.model)
+        self.callbacks = self.callbacks[:-1] + [callback] + [self.model.log]
+        # self.callbacks.append(callback)
 
     def give_model(self, model):
+        self.model = model
         for c in self.callbacks:
             c.give_model(model)
 
@@ -475,6 +483,30 @@ class LRSchedulerBatch(Callback):
         self.scheduler.step()
         return False
 
+class LRCosineAnnealing(LRSchedulerBatch):
+    def __init__(self, cycle_len="epoch", cycle_multiplier=2, eta_min=0, keep_etas=False):
+        self.cycle_len = cycle_len
+        self.cycle_multiplier = cycle_multiplier
+        self.eta_min = eta_min
+        self.keep_etas = keep_etas
+        scheduler = None
+        super().__init__(scheduler)
+    
+    def on_fit_start(self):
+        if self.cycle_len == "epoch":
+            self.cycle_len = self.model.fit_info['batches_per_epoch']
+        if not self.scheduler:
+            scheduler = lr_scheduler.LRBatchCosineAnnealing(self.model.optimizer, self.cycle_len,
+                                                            self.cycle_multiplier, self.eta_min,
+                                                            keep_etas=self.keep_etas)
+            self.scheduler = scheduler
+        elif self.model.optimizer is not self.scheduler.optimizer:
+            raise RuntimeError(
+                "Changed optimizer, and we have not implemented cosine annealing for this")
+    
+    def get_etas(self):
+        return self.scheduler.etas
+
 
 class LRFinder(Callback):
     def __init__(self, lr_min=1e-7, lr_max=10., n_steps=100, tolerance=10.):
@@ -486,8 +518,8 @@ class LRFinder(Callback):
 
     def on_fit_start(self):
         self.batch_loss = []
-        self.scheduler = LRFinderScheduler(self.model.optimizer, self.lr_min,
-                                           self.lr_max, self.n_steps)
+        self.scheduler = lr_scheduler.LRFinderScheduler(self.model.optimizer, self.lr_min,
+                                                        self.lr_max, self.n_steps)
     
     def on_batch_end(self):
         self.scheduler.step()
@@ -517,7 +549,7 @@ class LRFinder(Callback):
         return ax
     
     def get_best_lr(self):
-        return self.to_pandas(smoothed=0.98)['train_loss'].sort_values().index[0] / 10
+        return self.to_pandas(smoothed=0.98)['train_loss'].sort_values().index[0] / 10 / 2
 
 def _smooth_curve(vals, beta=0.98):
     """From fastai"""
@@ -531,15 +563,33 @@ def _smooth_curve(vals, beta=0.98):
 
 class WeightDecay(Callback):
     """Same weight decay for all groups in the optimizer."""
-    def __init__(self, weight_decay, normalized=False):
+    def __init__(self, weight_decay, normalized=False, nb_epochs=None):
         self.weight_decay = weight_decay
         self.normalized = normalized
         if self.normalized:
-            raise NotImplementedError()
+            if not ((type(nb_epochs) is int) or callable(nb_epochs)):
+                raise ValueError(f"Need nb_epochs to be callable or int, not {nb_epochs}")
+        self.nb_epochs = nb_epochs
+    
+    def on_fit_start(self):
+        self._batches_per_epoch = self.model.fit_info['batches_per_epoch']
+    
+    def _normalized_weight_decay(self):
+        if type(self.nb_epochs) is int:
+            nb_epochs = self.nb_epochs
+        elif callable(self.nb_epochs):
+            nb_epochs = self.nb_epochs()
+        else:
+            raise RuntimeError('nb_epochs needs to be callable or int')
+        norm_const = math.sqrt(self._batches_per_epoch / nb_epochs)
+        return self.weight_decay * norm_const
     
     def before_step(self):
         # Weight decay out of the loss. After the gradient computation but before the step.
-        weight_decay = self.weight_decay
+        if self.normalized:
+            weight_decay = self._normalized_weight_decay()
+        else:
+            weight_decay = self.weight_decay
         for group in self.model.optimizer.param_groups:
             lr = group['lr']
             alpha = group.get('initial_lr', 1.)
@@ -549,3 +599,49 @@ class WeightDecay(Callback):
                     p.data = p.data.add(-weight_decay * eta, p.data)
                     # p.data.mul_(1 - weight_decay * eta)
         return False
+
+# class AdamWR(Callback):
+#     """Implementation of AdamWR as a callback.
+#     It is essentialy an Adam optimizer with 
+#     """
+#     def __init__(self, lr=1e-1, betas=(0.9, 0.99), eps=1e-8, weight_decay=0., normalized=False,
+#                  cycle_len="epoch", cycle_multiplier=2, eta_min=0, keep_etas=True):
+#         self.lr = lr
+#         self.betas = betas
+#         self.eps = eps
+#         self.weight_decay = weight_decay
+#         self.normalized = normalized
+#         self.cycle_len = cycle_len
+#         self.cycle_multiplier = cycle_multiplier
+#         self.eta_min = eta_min
+#         self.keep_etas = keep_etas
+
+#         self.optimizer = None
+#         self.weight_decay_callback = None
+#         self.lr_sched = None
+#         self.cos_anneal = None
+    
+#     def on_fit_start(self):
+#         if self.optimizer is None:
+#             self.optimizer = AdamW(self.model.net.parameters(), self.lr, self.betas, self.eps)
+#             self.model.optimizer = self.optimizer
+        
+#         if self.cos_anneal is None:
+#             self.cos_anneal = BatchCosineAnnealingLR(self.optimizer, self.cycle_len, self.cycle_multiplier,
+#                                                     self.eta_min, keep_etas=self.keep_etas)
+#             self.lr_sched = LRSchedulerBatch(self.cos_anneal)
+
+#         if (self.weight_decay_callback is None) and self.weight_decay:
+#             nb_epochs = lambda: self.cos_anneal.cycle_len
+#             self.weight_decay_callback = WeightDecay(self.weight_decay, self.normalized, nb_epochs)
+#             self.weight_decay_callback.give_model(self.model)
+        
+#         # This is risky!!!!!!!!!!!
+#         self.model.callbacks.append(self.lr_sched)
+#         if self.weight_decay:
+#             self.model.callbacks.append(self.weight_decay_callback)
+
+
+
+
+        
