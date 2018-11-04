@@ -17,31 +17,75 @@ from .optim import AdamW
 from . import lr_scheduler 
 
 
-class CallbacksList(object):
+class CallbackHandler(object):
     '''Object for holding all callbacks.
 
     Parameters:
         callbacks_list: List containing callback objects.
     '''
-    def __init__(self, callbacks=None):
-        self.callbacks = callbacks if callbacks else []
-        self.model = None
+    def __init__(self, train_loss, log, callbacks=None):
+        self.callbacks = OrderedDict()
+        self.callbacks['train_loss'] = train_loss
+        self.callbacks['log'] = log
 
-    def append(self, callback):
+        if type(callbacks) in (list, tuple):
+            cb_as_dict = OrderedDict()
+            for cb in callbacks:
+                cb_as_dict[self._make_name(cb)] = cb
+            callbacks = cb_as_dict
+        if callbacks is not None:
+            callbacks = OrderedDict(callbacks)
+            for name, cb in callbacks.items():
+                assert name not in self.callbacks.keys(), f"Duplicate name: {name}"
+                self.callbacks[name] = cb
+
+        self.callbacks.move_to_end("log")
+        self.model = None
+    
+    def _make_name(self, obj):
+        name = obj.__class__.__name__
+        i = 0
+        while name in self.callbacks.keys():
+            name = name + '_' + str(i)
+            i += 1
+        return name
+    
+    def __getitem__(self, name):
+        return self.callbacks[name]
+    
+    def __setitem__(self, name, callback):
+        return self.append(callback, name)
+    
+    def items(self):
+        return self.callbacks.items()
+    
+    def keys(self):
+        return self.callbacks.keys()
+    
+    def values(self):
+        return self.callbacks.values()
+    
+    def __len__(self):
+        return len(self.callbacks)
+
+    def append(self, callback, name=None):
         if self.model is None:
             raise RuntimeError("Can only call append after the callback has received the model.")
         callback.give_model(self.model)
-        self.callbacks = self.callbacks[:-1] + [callback] + [self.model.log]
-        # self.callbacks.append(callback)
+        if name is None:
+            name = self._make_name(callback)
+        assert name not in self.callbacks.keys(), f"Duplicate name: {name}"
+        self.callbacks[name] = callback
+        self.callbacks.move_to_end("log")
 
     def give_model(self, model):
         self.model = model
-        for c in self.callbacks:
+        for c in self.callbacks.values():
             c.give_model(model)
 
     def on_fit_start(self):
         stop_signal = False
-        for c in self.callbacks:
+        for c in self.callbacks.values():
             stop = c.on_fit_start()
             stop = stop if stop else False
             stop_signal += stop
@@ -49,7 +93,7 @@ class CallbacksList(object):
 
     def before_step(self):
         stop_signal = False
-        for c in self.callbacks:
+        for c in self.callbacks.values():
             stop = c.before_step()
             stop = stop if stop else False
             stop_signal += stop
@@ -57,7 +101,7 @@ class CallbacksList(object):
 
     def on_batch_end(self):
         stop_signal = False
-        for c in self.callbacks:
+        for c in self.callbacks.values():
             stop = c.on_batch_end()
             stop = stop if stop else False
             stop_signal += stop
@@ -65,7 +109,7 @@ class CallbacksList(object):
 
     def on_epoch_end(self):
         stop_signal = False
-        for c in self.callbacks:
+        for c in self.callbacks.values():
             stop = c.on_epoch_end()
             stop = stop if stop else False
             stop_signal += stop
@@ -484,26 +528,33 @@ class LRSchedulerBatch(Callback):
         return False
 
 class LRCosineAnnealing(LRSchedulerBatch):
-    def __init__(self, cycle_len="epoch", cycle_multiplier=2, eta_min=0, keep_etas=False):
-        self.cycle_len = cycle_len
+    def __init__(self, cycle_len="epoch", cycle_multiplier=2, eta_min=0):
+        self.first_cycle_len = cycle_len
         self.cycle_multiplier = cycle_multiplier
         self.eta_min = eta_min
-        self.keep_etas = keep_etas
         scheduler = None
         super().__init__(scheduler)
     
     def on_fit_start(self):
-        if self.cycle_len == "epoch":
-            self.cycle_len = self.model.fit_info['batches_per_epoch']
+        if self.first_cycle_len == "epoch":
+            self.first_cycle_len = self.model.fit_info['batches_per_epoch']
+        # else:
+        #     self.first_cycle_len = self.cycle_len
         if not self.scheduler:
-            scheduler = lr_scheduler.LRBatchCosineAnnealing(self.model.optimizer, self.cycle_len,
+            scheduler = lr_scheduler.LRBatchCosineAnnealing(self.model.optimizer, self.first_cycle_len,
                                                             self.cycle_multiplier, self.eta_min,
-                                                            keep_etas=self.keep_etas)
+                                                            keep_etas=True)
             self.scheduler = scheduler
         elif self.model.optimizer is not self.scheduler.optimizer:
             raise RuntimeError(
                 "Changed optimizer, and we have not implemented cosine annealing for this")
     
+    def get_cycle_len(self):
+        return self.scheduler.cycle_len
+    
+    def get_epochs_per_cycle(self):
+        return self.get_cycle_len() / self.model.fit_info['batches_per_epoch']
+
     def get_etas(self):
         return self.scheduler.etas
 
@@ -581,7 +632,7 @@ class WeightDecay(Callback):
             nb_epochs = self.nb_epochs()
         else:
             raise RuntimeError('nb_epochs needs to be callable or int')
-        norm_const = math.sqrt(self._batches_per_epoch / nb_epochs)
+        norm_const = math.sqrt(1 / (self._batches_per_epoch * nb_epochs))
         return self.weight_decay * norm_const
     
     def before_step(self):

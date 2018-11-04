@@ -61,10 +61,14 @@ class Model(object):
         self.fit_info = {'batches_per_epoch': len(dataloader)}
 
         self.log.verbose = verbose
-        if callbacks is None:
-            callbacks = []
-        self.callbacks = cb.CallbacksList([self.train_loss] + callbacks + [self.log])
+        # if callbacks is None:
+        #     callbacks = []
+        # self.callbacks = cb.CallbacksList([self.train_loss] + callbacks + [self.log])
+        self.callbacks = cb.CallbackHandler(self.train_loss, self.log, callbacks)
         self.callbacks.give_model(self)
+        # self.callbacks.add_training_log(self.train_loss, self.log)
+        # self.callbacks.append(self.log, name="log")
+        # self.callbacks.append(self.train_loss, name="train_loss", first=True)
 
     def fit_dataloader(self, dataloader, epochs=1, callbacks=None, verbose=True):
         self._setup_train_info(dataloader, verbose, callbacks)

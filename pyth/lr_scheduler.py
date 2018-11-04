@@ -69,12 +69,14 @@ class LRBatchCosineAnnealing(LRSchedulerBatch):
         last_batch {int} -- Index of last batch (default: {-1})
     """
     def __init__(self, optimizer, cycle_len=1, cycle_multiplier=2, eta_min=0, batch_iter=-1,
-                 keep_etas=False):
+                 keep_etas=True):
         super().__init__(optimizer, batch_iter)
         self.cycle_len = cycle_len
         self.cycle_multiplier = cycle_multiplier
         self.eta_min = eta_min
         self.keep_etas = keep_etas
+        if not keep_etas:
+            raise ValueError("For now, we require that 'keep_etas' is True")
         self.etas = []
         self.cycle_iter = self.batch_iter % self.cycle_len
     
