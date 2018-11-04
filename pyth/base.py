@@ -4,10 +4,11 @@
 from collections import OrderedDict
 import numpy as np
 import torch
-from torch import optim
+# from torch import optim
 from torch.utils.data import TensorDataset
 from .data import DataLoaderSlice, DatasetTuple
 from . import callbacks as cb
+from .optim import AdamW
 
 class Model(object):
     '''Abstract base model.
@@ -24,7 +25,7 @@ class Model(object):
     def __init__(self, net, loss, optimizer=None, device=None, net_predict=None):
         self.net = net
         self.loss = loss
-        self.optimizer = optimizer if optimizer else optim.Adam(self.net.parameters())
+        self.optimizer = optimizer if optimizer else AdamW(self.net.parameters())
 
         self.device = self._device_from__init__(device)
         self.net.to(self.device)

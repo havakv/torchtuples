@@ -241,7 +241,7 @@ class EarlyStopping(Callback):
         self.min_delta = min_delta
         self.patience = patience
         self.model_file_path = model_file_path
-        self.val = np.inf if self.minimize else -np.inf
+        self.cur_best = np.inf if self.minimize else -np.inf
         self.scores = []
         self.n = 0
 
@@ -250,12 +250,12 @@ class EarlyStopping(Callback):
         self.scores.append(score)
 
         if self.minimize:
-            if score < (self.val - self.min_delta):
-                self.val = score
+            if score < (self.cur_best - self.min_delta):
+                self.cur_best = score
                 self.n = -1
         else:
-            if score > (self.val + self.min_delta):
-                self.val = score
+            if score > (self.cur_best + self.min_delta):
+                self.cur_best = score
                 self.n = -1
         self.n += 1
 
@@ -599,6 +599,60 @@ class WeightDecay(Callback):
                     p.data = p.data.add(-weight_decay * eta, p.data)
                     # p.data.mul_(1 - weight_decay * eta)
         return False
+
+
+class EarlyStoppingCycle(Callback):
+    '''Stop training when monitored quantity has not improved the last cycle.
+    Takes a Monitor object that is also a callback.
+    Use first metric in mm_obj to determine early stopping.
+
+    Parameters:
+        mm_obj: Monitor object, where first metric is used for early stopping.
+            E.g. MonitorSurvival(df_val, 'cindex').
+        minimize: If we are to minimize or maximize monitor.
+        min_delta: Minimum change in the monitored quantity to qualify as an improvement,
+            i.e. an absolute change of less than min_delta, will count as no improvement.
+        patience: Number of cycles patience.
+        model_file_path: If spesified, the model weights will be stored whever a better score
+            is achieved.
+    '''
+    def __init__(self, sched_cb, mm_obj, minimize=True, min_delta=0, patience=1, 
+                 min_cycles=4, model_file_path=None):
+        self.mm_obj = mm_obj
+        self.minimize = minimize
+        self.min_delta = min_delta
+        self.patience = patience
+        self.min_cycles = min_cycles
+        self.model_file_path = model_file_path
+        self.sched_cb = sched_cb
+        self.cur_best = np.inf if self.minimize else -np.inf
+        self.cur_best_cycle_nb = None
+        
+    def on_epoch_end(self):
+        etas = self.sched_cb.get_etas()
+        cycle_nb = etas.count(1.) - 1
+        score = self.mm_obj.scores[0][-1]
+
+        if self.minimize:
+            if score < (self.cur_best - self.min_delta):
+                self.cur_best = score
+                self.cur_best_cycle_nb = cycle_nb
+                # self.n = -1
+        else:
+            if score > (self.cur_best + self.min_delta):
+                self.cur_best = score
+                self.cur_best_cycle_nb = cycle_nb
+                # self.n = -1
+        # self.n += 1
+
+        if (score == self.cur_best) and (self.model_file_path is not None):
+            self.model.save_model_weights(self.model_file_path)
+
+        stop_signal = ((cycle_nb > (self.cur_best_cycle_nb + self.patience)) and 
+                       (cycle_nb >= self.min_cycles))
+        return stop_signal
+
+
 
 # class AdamWR(Callback):
 #     """Implementation of AdamWR as a callback.
