@@ -2,6 +2,7 @@
 '''Base models.
 '''
 from collections import OrderedDict
+import warnings
 import numpy as np
 import torch
 # from torch import optim
@@ -182,6 +183,7 @@ class Model(object):
                 if score_func is None:
                     score = self.compute_loss(input, target)
                 else:
+                    warnings.warn(f"score_func {score_func} probably doesn't work... Not implemented")
                     score = score_func(self, input, target)
                 batch_scores.append(score)
         if eval_:
@@ -220,6 +222,8 @@ class Model(object):
         #########################3
         # Need to fix this so it understands which part of dataloader is x and y
         ######################
+        if not eval_:
+            warnings.warn("We still don't shuffle the data here... event though 'eval_' is True.")
         if func is None:
             func = self.net_predict
         if eval_:
@@ -252,7 +256,7 @@ class Model(object):
         return preds
 
     def predict_func_tensor(self, x, func=None, batch_size=8224, return_numpy=False, eval_=True,
-                            grads=False, move_to_cpu=False):
+                            grads=False, move_to_cpu=False, num_workers=0):
         '''Get func(X) for a tensor (or list of tensors) x.
 
         Parameters:
@@ -266,13 +270,14 @@ class Model(object):
             move_to_cpu: For large data set we want to keep as torch.Tensors we need to
                 move them to the cpu.
         '''
-        dataset = TensorDataset(*[x])
-        dataloader = DataLoaderSlice(dataset, batch_size)
+        # dataset = TensorDataset(*[x])
+        # dataloader = DataLoaderSlice(dataset, batch_size)
+        dataloader = tensor_to_dataloader(x, batch_size, shuffle=False, num_workers=num_workers)
         return self.predict_func_dataloader(dataloader, func, return_numpy, eval_, grads,
                                             move_to_cpu)
 
     def predict_func_numpy(self, x, func=None, batch_size=8224, return_numpy=True, eval_=True,
-                           grads=False, move_to_cpu=False):
+                           grads=False, move_to_cpu=False, num_workers=0):
         '''Get func(X) for a numpy array x.
 
         Parameters:
@@ -288,7 +293,7 @@ class Model(object):
         '''
         x = numpy_to_tensor(x)
         return self.predict_func_tensor(x, func, batch_size, return_numpy, eval_, grads,
-                                        move_to_cpu)
+                                        move_to_cpu, num_workers)
 
     def save_model_weights(self, path, **kwargs):
         '''Save the model weights.
