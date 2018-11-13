@@ -579,6 +579,8 @@ class LRFinder(Callback):
         if (batch_loss / self.lowest_loss) > self.tolerance:
             return True
         self.lowest_loss = min(self.lowest_loss, batch_loss)
+        if self.scheduler.batch_iter == self.n_steps:
+            return True
         return False
     
     def to_pandas(self, smoothed=0):
