@@ -18,8 +18,8 @@ import pyth.tuple
 from pyth.base import Model
 from pyth.data import DatasetTuple, DataLoaderSlice
 
-from pyth.base import class_of, numpy_to_tensor, tensor_to_dataloader, numpy_to_dataloader,\
-    to_device, tuple_if_tensor
+# from pyth.base import class_of, numpy_to_tensor, tensor_to_dataloader, numpy_to_dataloader,\
+#     to_device, tuple_if_tensor
 
-from pyth.tuple import Tuple, tuplefy
+from pyth.tuple import Tuple, tuplefy, tuplefy_if_not, to_device
 

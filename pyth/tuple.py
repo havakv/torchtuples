@@ -3,6 +3,7 @@ import itertools
 import operator
 import numpy as np
 import torch
+from pyth.data import DatasetTuple, DataLoaderSlice
 
 
 class Tuple(tuple):
@@ -67,7 +68,7 @@ class Tuple(tuple):
         return all(self)
 
     def tuplefy(self, types=(list, tuple)):
-        self = tuplefy(self, types)
+        self = tuplefy(self, types=types)
         return self
 
     def split(self, split_size, dim=0):
@@ -92,6 +93,28 @@ class Tuple(tuple):
         E.g. (a, a, a)
         """
         return all_equal(self)
+
+    def to_device(self, device):
+        return to_device(self, device)
+
+    def make_dataloader(self, batch_size, shuffle, num_workers=0):
+        return make_dataloader(self, batch_size, shuffle, num_workers)
+
+    @property
+    def iloc(self):
+        """Used in as pd.DataFrame.iloc for subsetting tensors and arrays"""
+        return _TupleSlicer(self)
+
+
+class _TupleSlicer:
+    def __init__(self, tuple_):
+        self.tuple_ = tuple_
+
+    def __getitem__(self, index):
+        return self.tuple_.apply(lambda x: x[index])
+
+
+
 
 
 # planning to remove list and tuple from this
@@ -299,10 +322,79 @@ def split_agg(agg):
         return Tuple(zip(*new)).tuplefy()
     return agg
 
-def tuplefy(data, types=(list, tuple)):
-    """Generate Tuple object by changign 'types' to Tuple recursively"""
-    types = list(types)
-    types.append(Tuple)
-    if type(data) in types:
-        return Tuple(tuplefy(sub) for sub in data)
+# def tuplefy(data, types=(list, tuple)):
+#     """Make Tuple object by recursively changing all 'types' to Tuple
+#     Use 'Tuple(data)' to only change top level.
+#     Use instead 'tuplefy_if_not(data)' if you do not want to tuplefy existing
+#     Tuple objects.
+#     """
+#     def _tuplefy(data, types):
+#         if type(data) in types:
+#             return Tuple(_tuplefy(sub, types) for sub in data)
+#         return data
+#     types = list(types)
+#     types.append(Tuple)
+#     if type(data) not in types:
+#         return Tuple((data,))
+#     return _tuplefy(data, types)
+def tuplefy(*data, types=(list, tuple)):
+    """Make Tuple object by recursively changing all 'types' to Tuple
+    Use 'Tuple(data)' to only change top level.
+    Use instead 'tuplefy_if_not(data)' if you do not want to tuplefy existing
+    Tuple objects.
+    """
+    def _tuplefy(data, types):
+        if type(data) in types:
+            return Tuple(_tuplefy(sub, types) for sub in data)
+        return data
+    types = list(types) + [Tuple]
+    # types.append(Tuple)
+    if (len(data) == 1) and (type(data[0]) in types):
+        data = data[0]
+    data = Tuple(data)
+    return _tuplefy(data, types)
+
+def tuplefy_if_not(*data, types=(list, tuple)):
+    """Call tuplefy on data if data is not Tuple (recursively making all Tuple).
+    If data is Tuple, leave strucure unchanged.
+    """
+    def _func(x):
+        if type(x) is Tuple:
+            return x
+        if type(x) not in types:
+            return x
+        return tuplefy(x, types=types)
+
+    data = Tuple(data).apply_nrec(_func)
+    if len(data) == 1:
+        return _tuple_if_not(data[0], types)
     return data
+
+def _tuple_if_not(data, types=(list, tuple)):
+    if type(data) not in (list(types) + [Tuple]):
+        data = (data,)
+    return Tuple(data)
+
+@apply_tuple
+def to_device(data, device):
+    if type(data) is not torch.Tensor:
+        raise RuntimeError(f"Need 'data' to be tensors, not {type(data)}.")
+    return data.to(device)
+
+def make_dataloader(data, batch_size, shuffle, num_workers=0):
+    dataset = DatasetTuple(data)
+    dataloader = DataLoaderSlice(dataset, batch_size, shuffle=shuffle, num_workers=num_workers)
+    return dataloader
+
+
+## Some tests that should be written
+# a = pyth.Tuple((1, (2, (3, 4))))
+
+# assert a == a.tuplefy()
+# assert a == tuplefy(a)
+
+# b = [1, [2, [3, 4]]]
+
+# assert a == tuplefy(b)
+# assert a == tuplefy(b[0], b[1])
+# assert tuplefy(1) == (1,)

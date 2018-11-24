@@ -20,6 +20,8 @@ if sys.version_info[0] == 2:
 else:
     import queue
 
+import pyth
+
 def _worker_loop(dataset, index_queue, data_queue, collate_fn, seed, init_fn, worker_id):
     global _use_shared_memory
     _use_shared_memory = True
@@ -238,24 +240,30 @@ class DatasetTuple(Dataset):
         target {tuple or list} -- Label information passed to the loss function
             (list of y tensors)
     """
-    def __init__(self, data):
-        self.data = data if data.__class__ in (list, tuple) else (data,)
+    def __init__(self, *data):
+        # self.data = data if data.__class__ in (list, tuple) else (data,)
+        self.data = pyth.tuplefy_if_not(*data)
 
     def __getitem__(self, index):
         if not hasattr(index, '__iter__'):
             index = [index]
-        return get_subset_nested(self.data, index)
+        return self.data.iloc[index]
+        # return get_subset_nested(self.data, index)
 
     def __len__(self):
-        return _len_nested(self.data)
+        lens = self.data.lens().flatten()
+        if not lens.all_equal():
+            raise RuntimeError("Need all tensors to have same lenght.")
+        return lens[0]
+        # return _len_nested(self.data)
 
 
-def _len_nested(data):
-    if data.__class__ in (list, tuple):
-        return _len_nested(data[0])
-    return data.shape[0]
+# def _len_nested(data):
+#     if data.__class__ in (list, tuple):
+#         return _len_nested(data[0])
+#     return data.shape[0]
 
-def get_subset_nested(data, index):
-    if data.__class__ in (list, tuple):
-        return tuple(get_subset_nested(x, index) for x in data)
-    return data[index]
+# def get_subset_nested(data, index):
+#     if data.__class__ in (list, tuple):
+#         return tuple(get_subset_nested(x, index) for x in data)
+#     return data[index]

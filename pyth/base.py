@@ -10,6 +10,7 @@ from torch.utils.data import TensorDataset
 from .data import DataLoaderSlice, DatasetTuple
 from . import callbacks as cb
 from .optim import AdamW
+from .tuple import to_device, tuplefy, tuplefy_if_not, Tuple
 
 class Model(object):
     '''Abstract base model.
@@ -115,8 +116,12 @@ class Model(object):
         #     target = (target,)
         # dataset = DatasetTuple(input, target)
         # dataloader = DataLoaderSlice(dataset, batch_size, shuffle=True, num_workers=num_workers)
-        dataloader = tensor_to_dataloader((input, target), batch_size, shuffle=True,
-                                          num_workers=num_workers)
+        dataloader = tuplefy_if_not(input, target).make_dataloader(batch_size, shuffle=True,
+                                                                   num_workers=num_workers)
+        # dataloader = tensor_to_dataloader((input, target), batch_size, shuffle=True,
+        #                                   num_workers=num_workers)
+        # dataloader = tensor_to_dataloader((input, target), batch_size, shuffle=True,
+        #                                   num_workers=num_workers)
         return self.fit_dataloader(dataloader, epochs, callbacks, verbose)
 
     def fit_numpy(self, input, target, batch_size=256, epochs=1, callbacks=None, verbose=True,
@@ -136,33 +141,41 @@ class Model(object):
         """
         # input = numpy_to_tensor(input)
         # target = numpy_to_tensor(target)
-        input, target = numpy_to_tensor((input, target))
+        # input, target = numpy_to_tensor((input, target))
+        input, target = tuplefy((input, target)).to_tensor()
         return self.fit_tensor(input, target, batch_size, epochs, callbacks, verbose, num_workers)
     
     def score_in_batches(self, data, score_func=None, batch_size=1028, eval_=True, mean=True,
                          num_workers=0, shuffle=False):
-        if data.__class__ not in (list, tuple):
-            return self.score_in_batches_dataloader(data, score_func, eval_, mean)
-        input, target = data
-        object_class = class_of(data)
-        if object_class is torch.Tensor:
-            return self.score_in_batches_tensor(input, target, score_func, batch_size,
-                                                eval_, mean, num_workers, shuffle)
-        elif object_class is np.ndarray:
-            return self.score_in_batches_numpy(input, target, score_func, batch_size,
-                                                eval_, mean, num_workers, shuffle)
-        raise ValueError("Need `data` to be a dataloader or contain np.arrays or torch tensors.")
+        if data.__class__ in (list, tuple, Tuple):
+            data = (tuplefy_if_not(data)
+                    .to_tensor()
+                    .make_dataloader(batch_size, shuffle=shuffle, num_workers=num_workers))
+        return self.score_in_batches_dataloader(data, score_func, eval_, mean)
+        # if data.__class__ not in (list, tuple, Tuple):
+        #     return self.score_in_batches_dataloader(data, score_func, eval_, mean)
+        # input, target = data
+        # if object_class is torch.Tensor:
+        #     return self.score_in_batches_tensor(input, target, score_func, batch_size,
+        #                                         eval_, mean, num_workers, shuffle)
+        # elif object_class is np.ndarray:
+        #     return self.score_in_batches_numpy(input, target, score_func, batch_size,
+        #                                         eval_, mean, num_workers, shuffle)
+        # raise ValueError("Need `data` to be a dataloader or contain np.arrays or torch tensors.")
     
     def score_in_batches_numpy(self, input, target, score_func=None, batch_size=1028,
                                 eval_=True, mean=True, num_workers=0, shuffle=False):
-        input, target = numpy_to_tensor((input, target))
-        return self.score_in_batches_tensor(input, target,score_func, batch_size,
+        # input, target = numpy_to_tensor((input, target))
+        input, target = tuplefy_if_not(input, target).to_tensor()
+        return self.score_in_batches_tensor(input, target, score_func, batch_size,
                                             eval_, mean, num_workers, shuffle)
 
     def score_in_batches_tensor(self, input, target, score_func=None, batch_size=1028,
                                 eval_=True, mean=True, num_workers=0, shuffle=False):
-        dataloader = tensor_to_dataloader((input, target), batch_size, shuffle=shuffle,
-                                          num_workers=num_workers)
+        # dataloader = tensor_to_dataloader((input, target), batch_size, shuffle=shuffle,
+        #                                   num_workers=num_workers)
+        dataloader = (tuplefy_if_not(input, target)
+                      .make_dataloader(batch_size, shuffle=shuffle, num_workers=num_workers))
         return self.score_in_batches_dataloader(dataloader, score_func, eval_, mean)
     
     def score_in_batches_dataloader(self, dataloader, score_func=None, eval_=True, mean=True):
@@ -198,12 +211,14 @@ class Model(object):
         input = self._to_device(input)
         target = self._to_device(target)
         out = self.net(*input)
-        out = tuple_if_tensor(out)
+        # out = tuple_if_tensor(out)
+        out = tuplefy_if_not(out)
         return self.loss(*out, *target)
     
     def _to_device(self, data):
-        data = to_device(data, self.device)
-        return tuple_if_tensor(data)
+        # data = to_device(data, self.device)
+        # return tuple_if_tensor(data)
+        return tuplefy_if_not(data).to_device(self.device)
     
     def predict_func_dataloader(self, dataloader, func=None, return_numpy=True, eval_=True, grads=False, move_to_cpu=False):
         '''Get func(X) for dataloader.
@@ -222,6 +237,7 @@ class Model(object):
         #########################3
         # Need to fix this so it understands which part of dataloader is x and y
         ######################
+        dataloader.dataset
         if not eval_:
             warnings.warn("We still don't shuffle the data here... event though 'eval_' is True.")
         if func is None:
@@ -272,7 +288,9 @@ class Model(object):
         '''
         # dataset = TensorDataset(*[x])
         # dataloader = DataLoaderSlice(dataset, batch_size)
-        dataloader = tensor_to_dataloader(x, batch_size, shuffle=False, num_workers=num_workers)
+        # dataloader = tensor_to_dataloader(x, batch_size, shuffle=False, num_workers=num_workers)
+        dataloader = (tuplefy_if_not(x)
+                      .make_dataloader(batch_size, shuffle=False, num_workers=num_workers))
         return self.predict_func_dataloader(dataloader, func, return_numpy, eval_, grads,
                                             move_to_cpu)
 
@@ -291,9 +309,14 @@ class Model(object):
             move_to_cpu: For large data set we want to keep as torch.Tensors we need to
                 move them to the cpu.
         '''
-        x = numpy_to_tensor(x)
-        return self.predict_func_tensor(x, func, batch_size, return_numpy, eval_, grads,
-                                        move_to_cpu, num_workers)
+        # x = numpy_to_tensor(x)
+        # return self.predict_func_tensor(x, func, batch_size, return_numpy, eval_, grads,
+        #                                 move_to_cpu, num_workers)
+        dataloader = (tuplefy_if_not(x)
+                      .to_tensor()
+                      .make_dataloader(batch_size, shuffle=False, num_workers=num_workers))
+        return self.predict_func_dataloader(dataloader, func, return_numpy, eval_, grads,
+                                            move_to_cpu)
 
     def save_model_weights(self, path, **kwargs):
         '''Save the model weights.
@@ -322,32 +345,32 @@ def class_of(data):
         raise ValueError("All objects in 'data' doest have the same class.")
     return classes[0]
 
-def numpy_to_tensor(data):
-    if data.__class__ in (list, tuple):
-        return tuple(numpy_to_tensor(sub) for sub in data)
-    return torch.from_numpy(data)#.float()
+# def numpy_to_tensor(data):
+#     if data.__class__ in (list, tuple):
+#         return tuple(numpy_to_tensor(sub) for sub in data)
+#     return torch.from_numpy(data)#.float()
     
-def tensor_to_dataloader(data, batch_size, shuffle, num_workers):
-    if class_of(data) is not torch.Tensor:
-        raise ValueError(f"Need 'data' to be tensors, not {class_of(data)}.")
-    if data.__class__ is torch.Tensor:
-        data = (data,)
-    dataset = DatasetTuple(data)
-    dataloader = DataLoaderSlice(dataset, batch_size, shuffle=shuffle, num_workers=num_workers)
-    return dataloader
+# def tensor_to_dataloader(data, batch_size, shuffle, num_workers):
+#     if class_of(data) is not torch.Tensor:
+#         raise ValueError(f"Need 'data' to be tensors, not {class_of(data)}.")
+#     if data.__class__ is torch.Tensor:
+#         data = (data,)
+#     dataset = DatasetTuple(data)
+#     dataloader = DataLoaderSlice(dataset, batch_size, shuffle=shuffle, num_workers=num_workers)
+#     return dataloader
 
-def numpy_to_dataloader(data, batch_size, shuffle, num_workers):
-    data = numpy_to_tensor(data)
-    return tensor_to_dataloader(data, batch_size, shuffle=shuffle, num_workers=num_workers)
+# def numpy_to_dataloader(data, batch_size, shuffle, num_workers):
+#     data = numpy_to_tensor(data)
+#     return tensor_to_dataloader(data, batch_size, shuffle=shuffle, num_workers=num_workers)
 
-def to_device(data, device):
-    if class_of(data) is not torch.Tensor:
-        raise ValueError(f"Need 'data' to be tensors, not {class_of(data)}.")
-    if data.__class__ is torch.Tensor:
-        return data.to(device)
-    return tuple(to_device(sub, device) for sub in data)
+# def to_device(data, device):
+#     if class_of(data) is not torch.Tensor:
+#         raise ValueError(f"Need 'data' to be tensors, not {class_of(data)}.")
+#     if data.__class__ is torch.Tensor:
+#         return data.to(device)
+#     return tuple(to_device(sub, device) for sub in data)
 
-def tuple_if_tensor(data):
-    if data.__class__ is torch.Tensor:
-        data = (data,)
-    return data
+# def tuple_if_tensor(data):
+#     if data.__class__ is torch.Tensor:
+#         data = (data,)
+#     return data
