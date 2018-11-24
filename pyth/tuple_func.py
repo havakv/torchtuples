@@ -5,12 +5,6 @@ import numpy as np
 import torch
 
 
-class ReductionList(list):
-    """Identical to list, but in not considered a 
-    list or tuple by the functioal api.
-    """
-    pass
-
 class Tuple(tuple):
     """Planning to extend this"""
     def apply(self, func):
