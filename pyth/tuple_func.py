@@ -15,6 +15,9 @@ class Tuple(tuple):
     """Planning to extend this"""
     def apply(self, func):
         return apply_tuple(func)(self)
+
+    def reduce(self, func, init_func=None, **kwargs):
+        return reduce_tuple(func, init_func)(self, **kwargs)
     
     def shapes(self):
         return shapes_of(self)
@@ -69,13 +72,32 @@ class Tuple(tuple):
             raise RuntimeError("Need to have a flat structure to use 'all'")
         return all(self)
 
-    def to_tuple(self, types=(list, tuple)):
-        self = to_tuple(self, types)
+    def tuplefy(self, types=(list, tuple)):
+        self = tuplefy(self, types)
         return self
 
     def split(self, split_size, dim=0):
         return split(self, split_size, dim)
 
+    def agg_list(self):
+        """Aggregate data to a list of the data
+        ((a1, (a2, a3)), (b1, (b2, b3))) -> ([a1, b1], ([a2, b2], [a3, b3]))
+
+        Inverse of split_agg
+        """
+        return agg_list(self)
+
+    def split_agg(self):
+        """The inverse opeation of agg_list
+        ([a1, b1], ([a2, b2], [a3, b3])) -> ((a1, (a2, a3)), (b1, (b2, b3)))
+        """
+        return split_agg(self)
+
+    def all_equal(self):
+        """All typles (from top level) are the same
+        E.g. (a, a, a)
+        """
+        return all_equal(self)
 
 
 # planning to remove list and tuple from this
@@ -106,6 +128,58 @@ def apply_tuple(func):
             return Tuple(wrapper(sub, *args, **kwargs) for sub in data)
         return func(data, *args, **kwargs)
     return wrapper
+
+def reduce_tuple(func, init_func=None):
+    """Reduce opration on tuples.
+    Works recursively on objects that are not Tuple:
+
+    Exs:
+    a = ((1, (2, 3), 4),
+         (1, (2, 3), 4),
+         (1, (2, 3), 4),)
+    a = tuplefy(a)
+    reduce_tuple(lambda x, y: x+y)(a)
+
+    Gives:
+    (3, (6, 9), 12)
+    """
+    def reduce_rec(acc_val, val, **kwargs):
+        if type(acc_val) in _CONTAINERS:
+            return Tuple(reduce_rec(av, v) for av, v in zip(acc_val, val))
+        return func(acc_val, val, **kwargs)
+
+    @functools.wraps(func)
+    def wrapper(data, **kwargs):
+        if not data.to_levels().all_equal():
+        # if not data.to_levels().reduce_nrec(operator.eq):
+            raise ValueError("Topology is not the same for all elements in data, and can not be reduced")
+        iterable = iter(data)
+        if init_func is None:
+            acc_val = next(iterable)
+        else:
+            acc_val = data[0].apply(init_func)
+        for val in iterable:
+            acc_val = reduce_rec(acc_val, val, **kwargs)
+        return acc_val
+    return wrapper
+
+def all_equal(data):
+    """All typles (from top level) are the same
+    E.g. (a, a, a)
+    """
+    return data.apply_nrec(lambda x: x == data[0]).all()
+
+def agg_list(data):
+    """Aggregate data to a list of the data
+    ((a1, (a2, a3)), (b1, (b2, b3))) -> ([a1, b1], ([a2, b2], [a3, b3]))
+
+    Inverse of split_agg
+    """
+    init_func = lambda _: list()
+    def append_func(list_, val):
+        list_.append(val)
+        return list_
+    return reduce_tuple(append_func, init_func)(data)
 
 @apply_tuple
 def shapes_of(data):
@@ -166,25 +240,6 @@ def type_of(data):
         raise ValueError("All objects in 'data' doest have the same type.")
     return types[0]
 
-    
-# @apply_tuple
-# def classes_of(data):
-#     """Returns all calsses in data"""
-#     return type(data)
-
-# def class_of(data):
-#     """Returns THE class of subelements in data.
-#     Hence, all elements in data needs to have the same class.
-#     """
-#     classes = classes_of(data)
-#     classes = flatten_tuple(classes)
-#     if classes.count(classes[0]) != len(classes):
-#         raise ValueError("All objects in 'data' doest have the same class.")
-#     return classes[0]
-
-# type_of = class_of
-# types_of = classes_of
-
 def is_flat(data):
     if type(data) not in _CONTAINERS:
         return True
@@ -216,35 +271,17 @@ def tuple_levels(data, level=-1):
         return level
     return Tuple(tuple_levels(sub, level+1) for sub in data)
 
-def append_list(data, new):
-    if type(data) not in _CONTAINERS:
-        assert type(new) is ReductionList, "Need lists in 'new' to be RecutionList"
-        new.append(data)
-        return new
-    for d, n in zip(data, new):
-        append_list(d, n)
-    return new
-
-def agg_list(data):
-    new = apply_tuple(lambda _: ReductionList())(data[0])
-    for sub in data:
-        append_list(sub, new)
-    return new
-
 def cat(seq, dim=0):
     """Conatenate tensors/arrays in tuple.
     Only works for dim=0, meaning we concatenate in the batch dim.
     """
     if dim != 0:
         raise NotImplementedError
-        # Would need to fix shapes for this!!!!
-    if not seq.to_levels().reduce_nrec(operator.eq):
-        raise ValueError("Topology is not the same for all elements in seq")
-    if not seq.shapes().apply(lambda x: x[1:]).reduce_nrec(operator.eq):
+    if not seq.shapes().apply(lambda x: x[1:]).all_equal():
         raise ValueError("Shapes of merged arrays need to be the same")
 
     type_ = seq.type()
-    agg = agg_list(seq)
+    agg = seq.agg_list()
     if type_ is torch.Tensor:
         return agg.apply(torch.cat)
     elif type_ is np.ndarray:
@@ -252,6 +289,7 @@ def cat(seq, dim=0):
     raise RuntimeError(f"Need type to be np.ndarray or torch.Tensor, fournd {type_}.")
 
 def split(data, split_size, dim=0):
+    """Use torch.split"""
     if dim != 0:
         raise NotImplementedError
     if data.type() is not torch.Tensor:
@@ -261,15 +299,16 @@ def split(data, split_size, dim=0):
     return split_agg(splitted)
 
 def split_agg(agg):
+    """The inverse opeation of agg_list"""
     if type(agg) is Tuple:
         new = agg.apply_nrec(split_agg)
-        return Tuple(zip(*new)).to_tuple()
-    # elif type(agg) is ReductionList:
+        return Tuple(zip(*new)).tuplefy()
     return agg
 
-def to_tuple(data, types=(list, tuple)):
+def tuplefy(data, types=(list, tuple)):
+    """Generate Tuple object by changign 'types' to Tuple recursively"""
     types = list(types)
     types.append(Tuple)
     if type(data) in types:
-        return Tuple(to_tuple(sub) for sub in data)
+        return Tuple(tuplefy(sub) for sub in data)
     return data
