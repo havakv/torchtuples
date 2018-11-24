@@ -10,7 +10,7 @@ from torch.utils.data import TensorDataset
 from .data import DataLoaderSlice, DatasetTuple
 from . import callbacks as cb
 from .optim import AdamW
-from .tuple import to_device, tuplefy, tuplefy_if_not, Tuple
+from .tuple import to_device, tuplefy, Tuple
 
 class Model(object):
     '''Abstract base model.
@@ -116,8 +116,8 @@ class Model(object):
         #     target = (target,)
         # dataset = DatasetTuple(input, target)
         # dataloader = DataLoaderSlice(dataset, batch_size, shuffle=True, num_workers=num_workers)
-        dataloader = tuplefy_if_not(input, target).make_dataloader(batch_size, shuffle=True,
-                                                                   num_workers=num_workers)
+        dataloader = (tuplefy(input, target)
+                      .make_dataloader(batch_size, shuffle=True, num_workers=num_workers))
         # dataloader = tensor_to_dataloader((input, target), batch_size, shuffle=True,
         #                                   num_workers=num_workers)
         # dataloader = tensor_to_dataloader((input, target), batch_size, shuffle=True,
@@ -148,7 +148,7 @@ class Model(object):
     def score_in_batches(self, data, score_func=None, batch_size=1028, eval_=True, mean=True,
                          num_workers=0, shuffle=False):
         if data.__class__ in (list, tuple, Tuple):
-            data = (tuplefy_if_not(data)
+            data = (tuplefy(data)
                     .to_tensor()
                     .make_dataloader(batch_size, shuffle=shuffle, num_workers=num_workers))
         return self.score_in_batches_dataloader(data, score_func, eval_, mean)
@@ -166,7 +166,7 @@ class Model(object):
     def score_in_batches_numpy(self, input, target, score_func=None, batch_size=1028,
                                 eval_=True, mean=True, num_workers=0, shuffle=False):
         # input, target = numpy_to_tensor((input, target))
-        input, target = tuplefy_if_not(input, target).to_tensor()
+        input, target = tuplefy(input, target).to_tensor()
         return self.score_in_batches_tensor(input, target, score_func, batch_size,
                                             eval_, mean, num_workers, shuffle)
 
@@ -174,7 +174,7 @@ class Model(object):
                                 eval_=True, mean=True, num_workers=0, shuffle=False):
         # dataloader = tensor_to_dataloader((input, target), batch_size, shuffle=shuffle,
         #                                   num_workers=num_workers)
-        dataloader = (tuplefy_if_not(input, target)
+        dataloader = (tuplefy(input, target)
                       .make_dataloader(batch_size, shuffle=shuffle, num_workers=num_workers))
         return self.score_in_batches_dataloader(dataloader, score_func, eval_, mean)
     
@@ -212,13 +212,13 @@ class Model(object):
         target = self._to_device(target)
         out = self.net(*input)
         # out = tuple_if_tensor(out)
-        out = tuplefy_if_not(out)
+        out = tuplefy(out)
         return self.loss(*out, *target)
     
     def _to_device(self, data):
         # data = to_device(data, self.device)
         # return tuple_if_tensor(data)
-        return tuplefy_if_not(data).to_device(self.device)
+        return tuplefy(data).to_device(self.device)
     
     def predict_func_dataloader(self, dataloader, func=None, return_numpy=True, eval_=True, grads=False, move_to_cpu=False):
         '''Get func(X) for dataloader.
@@ -289,7 +289,7 @@ class Model(object):
         # dataset = TensorDataset(*[x])
         # dataloader = DataLoaderSlice(dataset, batch_size)
         # dataloader = tensor_to_dataloader(x, batch_size, shuffle=False, num_workers=num_workers)
-        dataloader = (tuplefy_if_not(x)
+        dataloader = (tuplefy(x)
                       .make_dataloader(batch_size, shuffle=False, num_workers=num_workers))
         return self.predict_func_dataloader(dataloader, func, return_numpy, eval_, grads,
                                             move_to_cpu)
@@ -312,7 +312,7 @@ class Model(object):
         # x = numpy_to_tensor(x)
         # return self.predict_func_tensor(x, func, batch_size, return_numpy, eval_, grads,
         #                                 move_to_cpu, num_workers)
-        dataloader = (tuplefy_if_not(x)
+        dataloader = (tuplefy(x)
                       .to_tensor()
                       .make_dataloader(batch_size, shuffle=False, num_workers=num_workers))
         return self.predict_func_dataloader(dataloader, func, return_numpy, eval_, grads,

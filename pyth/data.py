@@ -242,7 +242,7 @@ class DatasetTuple(Dataset):
     """
     def __init__(self, *data):
         # self.data = data if data.__class__ in (list, tuple) else (data,)
-        self.data = pyth.tuplefy_if_not(*data)
+        self.data = pyth.tuplefy(*data)
 
     def __getitem__(self, index):
         if not hasattr(index, '__iter__'):

@@ -68,7 +68,7 @@ class Tuple(tuple):
         return all(self)
 
     def tuplefy(self, types=(list, tuple)):
-        self = tuplefy(self, types=types)
+        self = tuplefy(self, types=types, stop_at_tuple=False)
         return self
 
     def split(self, split_size, dim=0):
@@ -113,11 +113,6 @@ class _TupleSlicer:
     def __getitem__(self, index):
         return self.tuple_.apply(lambda x: x[index])
 
-
-
-
-
-# planning to remove list and tuple from this
 # _CONTAINERS = (list, tuple, Tuple)
 _CONTAINERS = (Tuple,)
 
@@ -337,43 +332,87 @@ def split_agg(agg):
 #     if type(data) not in types:
 #         return Tuple((data,))
 #     return _tuplefy(data, types)
-def tuplefy(*data, types=(list, tuple)):
-    """Make Tuple object by recursively changing all 'types' to Tuple
-    Use 'Tuple(data)' to only change top level.
-    Use instead 'tuplefy_if_not(data)' if you do not want to tuplefy existing
-    Tuple objects.
+# def tuplefy(*data, types=(list, tuple)):
+#     """Make Tuple object by recursively changing all 'types' to Tuple
+#     Use 'Tuple(data)' to only change top level.
+#     Use instead 'tuplefy_if_not(data)' if you do not want to tuplefy existing
+#     Tuple objects.
+#     """
+#     def _tuplefy(data, types):
+#         if type(data) in types:
+#             return Tuple(_tuplefy(sub, types) for sub in data)
+#         return data
+#     types = list(types) + [Tuple]
+#     # types.append(Tuple)
+#     if (len(data) == 1) and (type(data[0]) in types):
+#         data = data[0]
+#     data = Tuple(data)
+#     return _tuplefy(data, types)
+def tuplefy(*data, types=(list, tuple), stop_at_tuple=True):
+    """Make Tuple object from *args.
+    
+    Keyword Arguments:
+        types {tuple} -- Types that should be transformed to Tuple (default: {(list, tuple)})
+        stop_at_tuple {bool} -- If 'True', the recusion stops at Tuple elements,
+            and if 'False' it will continue through Tuple elements. (default: {True})
+    
+    Returns:
+        Tuple -- A Tuple object
     """
-    def _tuplefy(data, types):
-        if type(data) in types:
-            return Tuple(_tuplefy(sub, types) for sub in data)
+    def _tuplefy(data, first=False):
+        if (type(data) in types) or first:
+            return Tuple(_tuplefy(sub) for sub in data)
         return data
-    types = list(types) + [Tuple]
-    # types.append(Tuple)
-    if (len(data) == 1) and (type(data[0]) in types):
+
+    types = list(types)
+    if not stop_at_tuple:
+        types.extend(_CONTAINERS)
+    if (len(data) == 1) and ((type(data[0]) in types) or (type(data[0]) in _CONTAINERS)):
         data = data[0]
     data = Tuple(data)
-    return _tuplefy(data, types)
+    return _tuplefy(data, first=True)
 
-def tuplefy_if_not(*data, types=(list, tuple)):
-    """Call tuplefy on data if data is not Tuple (recursively making all Tuple).
-    If data is Tuple, leave strucure unchanged.
-    """
-    def _func(x):
-        if type(x) is Tuple:
-            return x
-        if type(x) not in types:
-            return x
-        return tuplefy(x, types=types)
 
-    data = Tuple(data).apply_nrec(_func)
-    if len(data) == 1:
-        return _tuple_if_not(data[0], types)
-    return data
+# def tuplefy(*data, types=(list, tuple), stop_at_tuple=True):
+#     """Make Tuple object by recursively changing all 'types' to Tuple
+#     Use 'Tuple(data)' to only change top level.
+#     Use instead 'tuplefy_if_not(data)' if you do not want to tuplefy existing
+#     Tuple objects.
+#     """
+#     if stop_at_tuple:
+#         return tuplefy_if_not(*data, types=types)
 
-def _tuple_if_not(data, types=(list, tuple)):
-    if type(data) not in (list(types) + [Tuple]):
-        data = (data,)
-    return Tuple(data)
+#     def _tuplefy(data, types):
+#         if type(data) in types:
+#             return Tuple(_tuplefy(sub, types) for sub in data)
+#         return data
+#     types = list(types) + [Tuple]
+#     # types.append(Tuple)
+#     if (len(data) == 1) and (type(data[0]) in types):
+#         data = data[0]
+#     data = Tuple(data)
+#     return _tuplefy(data, types)
+
+# def tuplefy_if_not(*data, types=(list, tuple)):
+#     """Call tuplefy on data if data is not Tuple (recursively making all Tuple).
+#     If data is Tuple, leave strucure unchanged.
+#     """
+#     def _func(x):
+#         if type(x) is Tuple:
+#             return x
+#         if type(x) not in types:
+#             return x
+#         return tuplefy(x, types=types, stop_at_tuple=False)
+
+#     data = Tuple(data).apply_nrec(_func)
+#     if len(data) == 1:
+#         return _tuple_if_not(data[0], types)
+#     return data
+
+# def _tuple_if_not(data, types=(list, tuple)):
+#     if type(data) not in (list(types) + [Tuple]):
+#         data = (data,)
+#     return Tuple(data)
 
 @apply_tuple
 def to_device(data, device):
