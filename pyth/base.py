@@ -61,6 +61,12 @@ class Model(object):
     
     def _setup_train_info(self, dataloader, verbose, callbacks):
         self.fit_info = {'batches_per_epoch': len(dataloader)}
+        def _tuple_info(tuple_):
+            tuple_ = tuplefy(tuple_)
+            return {'levels': tuple_.to_levels(), 'shapes': tuple_.shapes().apply(lambda x: x[1:])}
+        input, target = next(iter(dataloader))
+        self.fit_info['input'] = _tuple_info(input)
+        self.fit_info['target'] = _tuple_info(target)
 
         self.log.verbose = verbose
         # if callbacks is None:
@@ -219,6 +225,47 @@ class Model(object):
         # data = to_device(data, self.device)
         # return tuple_if_tensor(data)
         return tuplefy(data).to_device(self.device)
+
+    def predict(self, input, batch_size=8224, return_numpy=True, eval_=True,
+                grads=False, move_to_cpu=False, num_workers=0):
+        dataloader = (tuplefy(input)
+                      .to_tensor()
+                      .make_dataloader(batch_size, shuffle=False, num_workers=num_workers))
+        return self.predict_dataloader(dataloader, return_numpy, eval_=True, grads=False,
+                                       move_to_cpu=False)
+
+    def predict_dataloader(self, dataloader, return_numpy=True, eval_=True,
+                           grads=False, move_to_cpu=False):
+        if hasattr(self, 'fit_info'):
+            input = tuplefy(next(iter(dataloader)))
+            input_train = self.fit_info['input']
+            if input.to_levels() != input_train['levels']:
+                raise RuntimeError("""The input from the dataloader is different from
+                the 'input' during trainig. Make sure to remove target from dataloader""")
+            if input.shapes().apply(lambda x: x[1:]) != input_train['shapes']:
+                raise RuntimeError("""The input from the dataloader is different from
+                the 'input' during trainig. The shapes are different.""")
+
+        if not eval_:
+            warnings.warn("We still don't shuffle the data here... event though 'eval_' is True.")
+        if eval_:
+            self.net.eval()
+        with torch.set_grad_enabled(grads):
+            preds = []
+            for input in dataloader:
+                input = tuplefy(input).to_device(self.device)
+                preds_batch = tuplefy(self.net(*input))
+                if return_numpy or move_to_cpu:
+                    preds_batch = preds_batch.to_device('cpu')
+                preds.append(preds_batch)
+        if eval_:
+            self.net.eval()
+        preds = tuplefy(preds).cat()
+        if return_numpy:
+            preds = preds.to_numpy()
+        if len(preds) == 1:
+            preds = preds[0]
+        return preds
     
     def predict_func_dataloader(self, dataloader, func=None, return_numpy=True, eval_=True, grads=False, move_to_cpu=False):
         '''Get func(X) for dataloader.
@@ -237,7 +284,6 @@ class Model(object):
         #########################3
         # Need to fix this so it understands which part of dataloader is x and y
         ######################
-        dataloader.dataset
         if not eval_:
             warnings.warn("We still don't shuffle the data here... event though 'eval_' is True.")
         if func is None:

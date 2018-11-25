@@ -24,12 +24,12 @@ class Tuple(tuple):
         return dtypes_of(self)
     
     def to_tensor(self):
-        if type(self) is torch.Tensor:
+        if self.type() is torch.Tensor:
             return self
         return numpy_to_tensor(self)
 
     def to_numpy(self):
-        if type(self) is np.ndarray:
+        if self.type() is np.ndarray:
             return self
         return tensor_to_numpy(self)
     
