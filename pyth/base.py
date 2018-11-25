@@ -31,8 +31,8 @@ class Model(object):
 
         self.device = self._device_from__init__(device)
         self.net.to(self.device)
-        self.net_predict = net_predict if net_predict else self.net
-        self.net_predict.to(self.device)
+        # self.net_predict = net_predict if net_predict else self.net
+        # self.net_predict.to(self.device)
 
         self.train_loss = cb.MonitorTrainLoss()
         self.log = cb.TrainingLogger()
@@ -151,7 +151,7 @@ class Model(object):
         input, target = tuplefy((input, target)).to_tensor()
         return self.fit_tensor(input, target, batch_size, epochs, callbacks, verbose, num_workers)
     
-    def score_in_batches(self, data, score_func=None, batch_size=1028, eval_=True, mean=True,
+    def score_in_batches(self, data, score_func=None, batch_size=8224, eval_=True, mean=True,
                          num_workers=0, shuffle=False):
         if data.__class__ in (list, tuple, Tuple):
             data = (tuplefy(data)
@@ -169,20 +169,20 @@ class Model(object):
         #                                         eval_, mean, num_workers, shuffle)
         # raise ValueError("Need `data` to be a dataloader or contain np.arrays or torch tensors.")
     
-    def score_in_batches_numpy(self, input, target, score_func=None, batch_size=1028,
-                                eval_=True, mean=True, num_workers=0, shuffle=False):
-        # input, target = numpy_to_tensor((input, target))
-        input, target = tuplefy(input, target).to_tensor()
-        return self.score_in_batches_tensor(input, target, score_func, batch_size,
-                                            eval_, mean, num_workers, shuffle)
+    # def score_in_batches_numpy(self, input, target, score_func=None, batch_size=1028,
+    #                             eval_=True, mean=True, num_workers=0, shuffle=False):
+    #     # input, target = numpy_to_tensor((input, target))
+    #     input, target = tuplefy(input, target).to_tensor()
+    #     return self.score_in_batches_tensor(input, target, score_func, batch_size,
+    #                                         eval_, mean, num_workers, shuffle)
 
-    def score_in_batches_tensor(self, input, target, score_func=None, batch_size=1028,
-                                eval_=True, mean=True, num_workers=0, shuffle=False):
-        # dataloader = tensor_to_dataloader((input, target), batch_size, shuffle=shuffle,
-        #                                   num_workers=num_workers)
-        dataloader = (tuplefy(input, target)
-                      .make_dataloader(batch_size, shuffle=shuffle, num_workers=num_workers))
-        return self.score_in_batches_dataloader(dataloader, score_func, eval_, mean)
+    # def score_in_batches_tensor(self, input, target, score_func=None, batch_size=1028,
+    #                             eval_=True, mean=True, num_workers=0, shuffle=False):
+    #     # dataloader = tensor_to_dataloader((input, target), batch_size, shuffle=shuffle,
+    #     #                                   num_workers=num_workers)
+    #     dataloader = (tuplefy(input, target)
+    #                   .make_dataloader(batch_size, shuffle=shuffle, num_workers=num_workers))
+    #     return self.score_in_batches_dataloader(dataloader, score_func, eval_, mean)
     
     def score_in_batches_dataloader(self, dataloader, score_func=None, eval_=True, mean=True):
         '''Score a dataset in batches.
@@ -228,6 +228,23 @@ class Model(object):
 
     def predict(self, input, batch_size=8224, return_numpy=True, eval_=True,
                 grads=False, move_to_cpu=False, num_workers=0):
+        """Get predictions from 'input'.
+        
+        Arguments:
+            input {tuple, np.ndarra, or torch.tensor} -- Input to net.
+        
+        Keyword Arguments:
+            batch_size {int} -- Batch size (default: {8224})
+            return_numpy {bool} -- If 'False', tensor is returned (default: {True})
+            eval_ {bool} -- If 'True', use 'eval' modede on net. (default: {True})
+            grads {bool} -- If gradients should be computed (default: {False})
+            move_to_cpu {bool} -- For larger data sets we need to move the results to cpu
+                (default: {False})
+            num_workers {int} -- Number of workes in created dataloader (default: {0})
+        
+        Returns:
+            [Tuple, np.ndarray or tensor] -- Predictions
+        """
         dataloader = (tuplefy(input)
                       .to_tensor()
                       .make_dataloader(batch_size, shuffle=False, num_workers=num_workers))
@@ -236,6 +253,21 @@ class Model(object):
 
     def predict_dataloader(self, dataloader, return_numpy=True, eval_=True,
                            grads=False, move_to_cpu=False):
+        """Get predictions from dataloader.
+        
+        Arguments:
+            dataloader {DataLoader} -- Dataloader with inputs to net.
+        
+        Keyword Arguments:
+            return_numpy {bool} -- If 'False', tensor is returned (default: {True})
+            eval_ {bool} -- If 'True', use 'eval' modede on net. (default: {True})
+            grads {bool} -- If gradients should be computed (default: {False})
+            move_to_cpu {bool} -- For larger data sets we need to move the results to cpu
+                (default: {False})
+        
+        Returns:
+            [Tuple, np.ndarray or tensor] -- Predictions
+        """
         if hasattr(self, 'fit_info'):
             input = tuplefy(next(iter(dataloader)))
             input_train = self.fit_info['input']
@@ -267,102 +299,102 @@ class Model(object):
             preds = preds[0]
         return preds
     
-    def predict_func_dataloader(self, dataloader, func=None, return_numpy=True, eval_=True, grads=False, move_to_cpu=False):
-        '''Get func(X) for dataloader.
+    # def predict_func_dataloader(self, dataloader, func=None, return_numpy=True, eval_=True, grads=False, move_to_cpu=False):
+    #     '''Get func(X) for dataloader.
 
-        Parameters:
-            dataloader: Pytorch dataloader.
-            func: Pytorch module.
-            return_numpy: If False, a torch tensor is returned.
-            eval_: If true, set `fun` in eval mode for prediction
-                and back to train mode after that (only affects dropout and batchnorm).
-                If False, leaves `fun` modes as they are.
-            grads: If gradients should be computed.
-            move_to_cpu: For large data set we want to keep as torch.Tensors we need to
-                move them to the cpu.
-        '''
-        #########################3
-        # Need to fix this so it understands which part of dataloader is x and y
-        ######################
-        if not eval_:
-            warnings.warn("We still don't shuffle the data here... event though 'eval_' is True.")
-        if func is None:
-            func = self.net_predict
-        if eval_:
-            func.eval()
-        with torch.set_grad_enabled(grads):
-            preds = [self._predict_move_between_devices(func, x, return_numpy, move_to_cpu) 
-                     for x in dataloader]
-        if eval_:
-            func.train()
+    #     Parameters:
+    #         dataloader: Pytorch dataloader.
+    #         func: Pytorch module.
+    #         return_numpy: If False, a torch tensor is returned.
+    #         eval_: If true, set `fun` in eval mode for prediction
+    #             and back to train mode after that (only affects dropout and batchnorm).
+    #             If False, leaves `fun` modes as they are.
+    #         grads: If gradients should be computed.
+    #         move_to_cpu: For large data set we want to keep as torch.Tensors we need to
+    #             move them to the cpu.
+    #     '''
+    #     #########################3
+    #     # Need to fix this so it understands which part of dataloader is x and y
+    #     ######################
+    #     if not eval_:
+    #         warnings.warn("We still don't shuffle the data here... event though 'eval_' is True.")
+    #     if func is None:
+    #         func = self.net_predict
+    #     if eval_:
+    #         func.eval()
+    #     with torch.set_grad_enabled(grads):
+    #         preds = [self._predict_move_between_devices(func, x, return_numpy, move_to_cpu) 
+    #                  for x in dataloader]
+    #     if eval_:
+    #         func.train()
         
-        if preds[0].__class__ is torch.Tensor:
-            preds = torch.cat(preds)
-        else:
-            preds = [torch.cat(sub) for sub in (zip(*preds))]
+    #     if preds[0].__class__ is torch.Tensor:
+    #         preds = torch.cat(preds)
+    #     else:
+    #         preds = [torch.cat(sub) for sub in (zip(*preds))]
 
-        if return_numpy:
-            if preds.__class__ is torch.Tensor:
-                return preds.numpy()
-            else:
-                return [sub.numpy() for sub in preds]
-        return preds
+    #     if return_numpy:
+    #         if preds.__class__ is torch.Tensor:
+    #             return preds.numpy()
+    #         else:
+    #             return [sub.numpy() for sub in preds]
+    #     return preds
     
-    def _predict_move_between_devices(self, func, x, return_numpy, move_to_cpu):
-        preds = func(*self._to_device(x))
-        if return_numpy or move_to_cpu:
-            if preds.__class__ is torch.Tensor:
-                preds = preds.cpu()
-            else:
-                return [sub.cpu() for sub in preds]
-        return preds
+    # def _predict_move_between_devices(self, func, x, return_numpy, move_to_cpu):
+    #     preds = func(*self._to_device(x))
+    #     if return_numpy or move_to_cpu:
+    #         if preds.__class__ is torch.Tensor:
+    #             preds = preds.cpu()
+    #         else:
+    #             return [sub.cpu() for sub in preds]
+    #     return preds
 
-    def predict_func_tensor(self, x, func=None, batch_size=8224, return_numpy=False, eval_=True,
-                            grads=False, move_to_cpu=False, num_workers=0):
-        '''Get func(X) for a tensor (or list of tensors) x.
+    # def predict_func_tensor(self, x, func=None, batch_size=8224, return_numpy=False, eval_=True,
+    #                         grads=False, move_to_cpu=False, num_workers=0):
+    #     '''Get func(X) for a tensor (or list of tensors) x.
 
-        Parameters:
-            x: Tensor or list of tensors with covariates.
-            func: Pytorch module.
-            batch_size: Batch size.
-            return_numpy: If False, a torch tensor is returned.
-            eval_: If true, set `fun` in eval mode for prediction
-                and back to train mode after that (only affects dropout and batchnorm).
-                If False, leaves `fun` modes as they are.
-            move_to_cpu: For large data set we want to keep as torch.Tensors we need to
-                move them to the cpu.
-        '''
-        # dataset = TensorDataset(*[x])
-        # dataloader = DataLoaderSlice(dataset, batch_size)
-        # dataloader = tensor_to_dataloader(x, batch_size, shuffle=False, num_workers=num_workers)
-        dataloader = (tuplefy(x)
-                      .make_dataloader(batch_size, shuffle=False, num_workers=num_workers))
-        return self.predict_func_dataloader(dataloader, func, return_numpy, eval_, grads,
-                                            move_to_cpu)
+    #     Parameters:
+    #         x: Tensor or list of tensors with covariates.
+    #         func: Pytorch module.
+    #         batch_size: Batch size.
+    #         return_numpy: If False, a torch tensor is returned.
+    #         eval_: If true, set `fun` in eval mode for prediction
+    #             and back to train mode after that (only affects dropout and batchnorm).
+    #             If False, leaves `fun` modes as they are.
+    #         move_to_cpu: For large data set we want to keep as torch.Tensors we need to
+    #             move them to the cpu.
+    #     '''
+    #     # dataset = TensorDataset(*[x])
+    #     # dataloader = DataLoaderSlice(dataset, batch_size)
+    #     # dataloader = tensor_to_dataloader(x, batch_size, shuffle=False, num_workers=num_workers)
+    #     dataloader = (tuplefy(x)
+    #                   .make_dataloader(batch_size, shuffle=False, num_workers=num_workers))
+    #     return self.predict_func_dataloader(dataloader, func, return_numpy, eval_, grads,
+    #                                         move_to_cpu)
 
-    def predict_func_numpy(self, x, func=None, batch_size=8224, return_numpy=True, eval_=True,
-                           grads=False, move_to_cpu=False, num_workers=0):
-        '''Get func(X) for a numpy array x.
+    # def predict_func_numpy(self, x, func=None, batch_size=8224, return_numpy=True, eval_=True,
+    #                        grads=False, move_to_cpu=False, num_workers=0):
+    #     '''Get func(X) for a numpy array x.
 
-        Parameters:
-            X: Numpy matrix with with covariates.
-            func: Pytorch module.
-            batch_size: Batch size.
-            return_numpy: If False, a torch tensor is returned.
-            eval_: If true, set `fun` in eval mode for prediction
-                and back to train mode after that (only affects dropout and batchnorm).
-                If False, leaves `fun` modes as they are.
-            move_to_cpu: For large data set we want to keep as torch.Tensors we need to
-                move them to the cpu.
-        '''
-        # x = numpy_to_tensor(x)
-        # return self.predict_func_tensor(x, func, batch_size, return_numpy, eval_, grads,
-        #                                 move_to_cpu, num_workers)
-        dataloader = (tuplefy(x)
-                      .to_tensor()
-                      .make_dataloader(batch_size, shuffle=False, num_workers=num_workers))
-        return self.predict_func_dataloader(dataloader, func, return_numpy, eval_, grads,
-                                            move_to_cpu)
+    #     Parameters:
+    #         X: Numpy matrix with with covariates.
+    #         func: Pytorch module.
+    #         batch_size: Batch size.
+    #         return_numpy: If False, a torch tensor is returned.
+    #         eval_: If true, set `fun` in eval mode for prediction
+    #             and back to train mode after that (only affects dropout and batchnorm).
+    #             If False, leaves `fun` modes as they are.
+    #         move_to_cpu: For large data set we want to keep as torch.Tensors we need to
+    #             move them to the cpu.
+    #     '''
+    #     # x = numpy_to_tensor(x)
+    #     # return self.predict_func_tensor(x, func, batch_size, return_numpy, eval_, grads,
+    #     #                                 move_to_cpu, num_workers)
+    #     dataloader = (tuplefy(x)
+    #                   .to_tensor()
+    #                   .make_dataloader(batch_size, shuffle=False, num_workers=num_workers))
+    #     return self.predict_func_dataloader(dataloader, func, return_numpy, eval_, grads,
+    #                                         move_to_cpu)
 
     def save_model_weights(self, path, **kwargs):
         '''Save the model weights.
@@ -383,13 +415,13 @@ class Model(object):
         self.net.load_state_dict(torch.load(path, **kwargs))
 
 
-def class_of(data):
-    if data.__class__ not in (list, tuple):
-        return data.__class__
-    classes = [class_of(sub) for sub in data]
-    if classes.count(classes[0]) != len(classes):
-        raise ValueError("All objects in 'data' doest have the same class.")
-    return classes[0]
+# def class_of(data):
+#     if data.__class__ not in (list, tuple):
+#         return data.__class__
+#     classes = [class_of(sub) for sub in data]
+#     if classes.count(classes[0]) != len(classes):
+#         raise ValueError("All objects in 'data' doest have the same class.")
+#     return classes[0]
 
 # def numpy_to_tensor(data):
 #     if data.__class__ in (list, tuple):
