@@ -241,29 +241,15 @@ class DatasetTuple(Dataset):
             (list of y tensors)
     """
     def __init__(self, *data):
-        # self.data = data if data.__class__ in (list, tuple) else (data,)
         self.data = pyth.tuplefy(*data)
 
     def __getitem__(self, index):
         if not hasattr(index, '__iter__'):
             index = [index]
         return self.data.iloc[index]
-        # return get_subset_nested(self.data, index)
 
     def __len__(self):
         lens = self.data.lens().flatten()
         if not lens.all_equal():
             raise RuntimeError("Need all tensors to have same lenght.")
         return lens[0]
-        # return _len_nested(self.data)
-
-
-# def _len_nested(data):
-#     if data.__class__ in (list, tuple):
-#         return _len_nested(data[0])
-#     return data.shape[0]
-
-# def get_subset_nested(data, index):
-#     if data.__class__ in (list, tuple):
-#         return tuple(get_subset_nested(x, index) for x in data)
-#     return data[index]
