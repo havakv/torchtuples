@@ -1,6 +1,5 @@
 import functools
 import itertools
-import operator
 import numpy as np
 import torch
 from pyth.data import DatasetTuple, DataLoaderSlice
@@ -53,7 +52,6 @@ def reduce_leaf(func, init_func=None):
     @functools.wraps(func)
     def wrapper(data, **kwargs):
         if not data.to_levels().all_equal():
-        # if not data.to_levels().reduce_nrec(operator.eq):
             raise ValueError("Topology is not the same for all elements in data, and can not be reduced")
         iterable = iter(data)
         if init_func is None:
@@ -433,5 +431,4 @@ class _TupleSlicer:
         return self.tuple_.apply(lambda x: x[index])
 
 
-# _CONTAINERS = (list, tuple, Tuple)
 _CONTAINERS = (Tuple,)

@@ -1,16 +1,14 @@
 
-'''Base models.
-'''
+"""Model for fitting torch models.
+"""
 from collections import OrderedDict
 import warnings
-import numpy as np
+import numpy as np  # shoul be remved
 import torch
-# from torch import optim
-from torch.utils.data import TensorDataset
-from .data import DataLoaderSlice, DatasetTuple
-from . import callbacks as cb
-from .optim import AdamW
-from .tuple import to_device, tuplefy, Tuple, make_dataloader
+import pyth.callbacks as cb
+from pyth.optim import AdamW
+from pyth.tuple import tuplefy, Tuple, make_dataloader
+
 
 class Model(object):
     """Train torch models using dataloaders, tensors or np.arrays.
@@ -28,6 +26,23 @@ class Model(object):
             If 'None': use default gpu if avaiable, else use cpu.
             If 'int': used that gpu: torch.device('cuda:<device>').
             If 'string': string is passed to torch.device('string').
+
+    Example simple model:
+    ---------------------
+    from pyth import Model
+    import torch
+    from torch import nn
+    from torch.nn import functional as F
+
+    n_rows, n_covs = 1000, 4
+    x = torch.randn((n_rows, n_covs))
+    y = 2 * x.sum(1, keepdim=True) + 4  # y = 2 * x + 4
+
+    net = nn.Sequential(nn.Linear(n_covs, 10), nn.ReLU(), nn.Linear(10, 1))
+    loss = F.mse_loss
+    model = Model(net, loss)
+    log = model.fit(x, y, batch_size=32, epochs=30)
+    log.plot()
     """
     def __init__(self, net, loss=None, optimizer=None, device=None):
         self.net = net
