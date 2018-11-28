@@ -10,7 +10,7 @@ import pyth.base
 import pyth.callbacks
 import pyth.practical
 import pyth.optim
-import pyth.tuple
+import pyth.tupleleaf
 
 from pyth.base import Model
-from pyth.tuple import Tuple, tuplefy, to_device, numpy_to_tensor, tensor_to_numpy, make_dataloader
+from pyth.tupleleaf import TupleLeaf, tuplefy, to_device, numpy_to_tensor, tensor_to_numpy, make_dataloader

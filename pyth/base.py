@@ -7,7 +7,7 @@ import numpy as np  # shoul be remved
 import torch
 import pyth.callbacks as cb
 from pyth.optim import AdamW
-from pyth.tuple import tuplefy, Tuple, make_dataloader
+from pyth.tupleleaf import tuplefy, TupleLeaf, make_dataloader
 
 
 class Model(object):
@@ -189,7 +189,7 @@ class Model(object):
 
     def score_in_batches(self, data, score_func=None, batch_size=8224, eval_=True, mean=True,
                          num_workers=0, shuffle=False):
-        if data.__class__ in (list, tuple, Tuple):
+        if data.__class__ in (list, tuple, TupleLeaf):
             data = make_dataloader(data, batch_size, shuffle, num_workers)
         scores = self.score_in_batches_dataloader(data, score_func, eval_, mean)
         return scores
@@ -239,7 +239,7 @@ class Model(object):
             num_workers {int} -- Number of workes in created dataloader (default: {0})
         
         Returns:
-            [Tuple, np.ndarray or tensor] -- Predictions
+            [TupleLeaf, np.ndarray or tensor] -- Predictions
         """
         dataloader = make_dataloader(input, batch_size, shuffle=False, num_workers=num_workers)
         preds = self.predict_dataloader(dataloader, return_numpy, eval_=True, grads=False,
@@ -261,7 +261,7 @@ class Model(object):
                 (default: {False})
         
         Returns:
-            [Tuple, np.ndarray or tensor] -- Predictions
+            [TupleLeaf, np.ndarray or tensor] -- Predictions
         """
         if hasattr(self, 'fit_info'):
             input = tuplefy(next(iter(dataloader)))
