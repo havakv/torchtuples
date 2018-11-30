@@ -69,6 +69,19 @@ def all_equal(data):
     """
     return data.apply_nrec(lambda x: x == data[0]).all()
 
+def get_if_all_equal(data, default=None):
+    """Get value of all are the same, else return default value.
+    
+    Arguments:
+        data {TupleLeaf} -- TupleLeaf data.
+    
+    Keyword Arguments:
+        default {any} -- Return if all are not equal (default: {None})
+    """
+    if data.all_equal():
+        return data[0]
+    return default
+
 def zip_leaf(data):
     """Aggregate data to a list of the data.
     This is essentialy a zip opperation that works on the leaf nodes
@@ -190,6 +203,22 @@ def cat(seq, dim=0):
         return agg.apply(np.concatenate)
     raise RuntimeError(f"Need type to be np.ndarray or torch.Tensor, fournd {type_}.")
 
+def stack(seq, dim=0):
+    """Stack tensors in tuple, see torch.stack.
+    Only works for dim=0.
+    """
+    if dim != 0:
+        raise NotImplementedError
+    if not seq.shapes().all_equal():
+        raise ValueError("Shapes of merged arrays need to be the same")
+    type_ = seq.type()
+    agg = seq.zip_leaf()
+    if type_ is torch.Tensor:
+        return agg.apply(torch.stack)
+    elif type_ is np.ndarray:
+        raise NotImplementedError
+    raise RuntimeError(f"Need type to be np.ndarray or torch.Tensor, fournd {type_}.")
+
 def split(data, split_size, dim=0):
     """Use torch.split and create multiple TupleLeafs with the splitted tensors."""
     if dim != 0:
@@ -297,6 +326,10 @@ class TupleLeaf(tuple):
 
     Hence the apply methods is a map function on the leaf nodes.
     """
+    @property
+    def _constructor(self):
+        return TupleLeaf
+
     def apply(self, func):
         """Shorthand to apply_leaf(func)(self)"""
         return apply_leaf(func)(self)
@@ -314,6 +347,9 @@ class TupleLeaf(tuple):
         Gives: (3, (6, 9), 12)
         """
         return reduce_leaf(func, init_func)(self, **kwargs)
+
+    def __add__(self, other):
+        return self._constructor(super().__add__(other))
     
     @docstring(shapes_of)
     def shapes(self):
@@ -417,7 +453,15 @@ class TupleLeaf(tuple):
         """Used in as pd.DataFrame.iloc for subsetting tensors and arrays"""
         return _TupleLeafSlicer(self)
 
-    def pipe(self, func, *arg, **kwargs):
+    @docstring(get_if_all_equal)
+    def get_if_all_equal(self, default=None):
+        return get_if_all_equal(self, default)
+
+    @docstring(stack)
+    def stack(self, dim=0):
+        return stack(self, dim)
+
+    def pipe(self, func, *args, **kwargs):
         """Shorthand for func(self, *args, **kwargs)"""
         return func(self, *args, **kwargs)
 
@@ -429,5 +473,5 @@ class _TupleLeafSlicer:
     def __getitem__(self, index):
         return self.tuple_.apply(lambda x: x[index])
 
-
-_CONTAINERS = (TupleLeaf,)
+# One can append to this to add inherited methods
+_CONTAINERS = [TupleLeaf]
