@@ -55,10 +55,21 @@ class Model(object):
         self.net.to(self.device)
         # self.net_predict = net_predict if net_predict else self.net
         # self.net_predict.to(self.device)
+        if not hasattr(self, 'make_dataloader_predict'):
+            self.make_dataloader_predict = self.make_dataloader
 
+        # self.metrics = {'loss': self.loss}
+        # if metrics is not None:
+        #     if not hasattr(metrics, 'items'):
+        #         raise ValueError(f"Need metrics to be a dictionary or None, got type {type(metrics)}")
+        #     if metrics.get('loss'):
+        #         raise ValueError(f"The 'loss' keyword is reserved for the loss function.")
+        #     self.metrics.update(metrics)
         self.train_loss = cb.MonitorTrainLoss()
         self.log = cb.TrainingLogger()
-        self.log.monitors = OrderedDict(train_loss=self.train_loss)
+        # self.log.monitors = OrderedDict(train_loss=self.train_loss)
+        self.train_metrics = cb.MonitorTrainMetrics()
+        self.log.monitors = OrderedDict(train_=self.train_metrics)
     
     @staticmethod
     def _device_from__init__(device):
@@ -79,6 +90,33 @@ class Model(object):
     @optimizer.setter
     def optimizer(self, optimizer):
         self._optimizer = optimizer
+
+    @staticmethod
+    def make_dataloader(data, batch_size, shuffle, num_workers=0, **kwargs):
+        """Function for creating a dataloader from tensors or arrays.
+        It is natural to rewrite this method in inherited classes.
+
+        self.make_dataloader_predict will be set to this method if not implemented
+        separatelly.
+
+        This simply calls tupleleaf.make_dataloader, but is included to make
+        inheritance simpler. 
+
+        Arguments:
+            data {tuple, np.array, tensor} -- Data in dataloader e.g. (x, y)
+            batch_size {int} -- Batch size used in dataloader
+            shuffle {bool} -- If order should be suffled
+
+        Keyword Arguments:
+            num_workers {int} -- Number of workers in dataloader (default: {0})
+            to_tensor {bool} -- Ensure that we use tensors (default: {True})
+            **kwargs -- Passed to make_dataloader.
+
+        Returns:
+            DataLoaderSlice -- A dataloader object like the torch DataLoader
+        """
+        dataloader = make_dataloader(data, batch_size, shuffle, num_workers, **kwargs)
+        return dataloader
     
     def _setup_train_info(self, dataloader, verbose, callbacks):
         self.fit_info = {'batches_per_epoch': len(dataloader)}
@@ -87,30 +125,29 @@ class Model(object):
             return {'levels': tuple_.to_levels(), 'shapes': tuple_.shapes().apply(lambda x: x[1:])}
         input, target = next(iter(dataloader))
         self.fit_info['input'] = _tuple_info(input)
-        self.fit_info['target'] = _tuple_info(target)
+        # self.fit_info['target'] = _tuple_info(target)
 
-        self.log.verbose = verbose
-        self.callbacks = cb.CallbackHandler(self.train_loss, self.log, callbacks)
-        self.callbacks.give_model(self)
-
-    def compute_loss(self, input, target):
+    def compute_metrics(self, input, target, metrics):
         """Function for computing loss.
         Is rather general, but can be reimpliemented by sub classes.
         
         Arguments:
             input {tensor or tuple} -- This should be passed to self.net.
             target {tensor or tuple} -- This is the targets that should be used in self.loss.
-        
+            metrics (dictionary with funcs) -- Metrics that should be computed.
+
         Returns:
             tensor -- Results of self.loss()
         """
-        if self.loss is None:
+        if (self.loss is None) and (self.loss in metrics.values()):
             raise RuntimeError(f"Need to specify a loss (self.loss). It's currently None")
         input = self._to_device(input)
         target = self._to_device(target)
         out = self.net(*input)
         out = tuplefy(out)
-        return self.loss(*out, *target)
+        res = {name: metric(*out, *target) for name, metric in metrics.items()}
+        return res
+        # return self.loss(*out, *target)
     
     def _to_device(self, data):
         """Move data to self.device.
@@ -121,9 +158,11 @@ class Model(object):
         Returns:
             tensor or tuple -- Data moved to device.
         """
+        if data is None:
+            return tuplefy(data)
         return tuplefy(data).to_device(self.device)
 
-    def fit_dataloader(self, dataloader, epochs=1, callbacks=None, verbose=True):
+    def fit_dataloader(self, dataloader, epochs=1, callbacks=None, verbose=True, metrics=None):
         """Fit a dataloader object.
         See 'fit' for tensors and np.arrays.
         
@@ -138,14 +177,33 @@ class Model(object):
         Returns:
             TrainingLogger -- Training log
         """
+        self.metrics = {'loss': self.loss}
+        if metrics is not None:
+            if not hasattr(metrics, 'items'):
+                new_metrics = OrderedDict()
+                if not hasattr(metrics, '__iter__'):
+                    metrics = [metrics]
+                for met in metrics:
+                    new_metrics[met.__name__] = met
+                metrics = new_metrics
+            if metrics.get('loss'):
+                raise ValueError(f"The 'loss' keyword is reserved for the loss function.")
+            self.metrics.update(metrics)
+        # self.log.monitors = OrderedDict(train_loss=self.train_loss)
         self._setup_train_info(dataloader, verbose, callbacks)
+        self.log.verbose = verbose
+        # self.callbacks = cb.CallbackHandler(self.train_loss, self.log, callbacks)
+        self.callbacks = cb.CallbackHandler(self.train_metrics, self.log, callbacks)
+        self.callbacks.give_model(self)
         stop_signal = self.callbacks.on_fit_start()
         if stop_signal:
             raise RuntimeError('Got stop_signal from callback before fit starts')
         for _ in range(epochs):
             for input, target in dataloader:
                 self.optimizer.zero_grad()
-                self.batch_loss = self.compute_loss(input, target)
+                # self.batch_loss = self.compute_loss(input, target)
+                self.batch_metrics = self.compute_metrics(input, target, self.metrics)
+                self.batch_loss = self.batch_metrics['loss']
                 self.batch_loss.backward()
                 stop_signal += self.callbacks.before_step()
                 if stop_signal:
@@ -161,7 +219,7 @@ class Model(object):
         return self.log
 
     def fit(self, input, target, batch_size=256, epochs=1, callbacks=None, verbose=True,
-            num_workers=0, shuffle=True):
+            num_workers=0, shuffle=True, metrics=None, **kwargs):
         """Fit  model with inputs and targets.
         
         Arguments:
@@ -175,12 +233,13 @@ class Model(object):
             verbose {bool} -- Print progress (default: {True})
             num_workers {int} -- Number of workers used in the dataloader (default: {0})
             shuffle {bool} -- If we should shuffle the order of the dataset (default: {True})
+            **kwargs are passed to 'make_dataloader' method.
     
         Returns:
             TrainingLogger -- Training log
         """
-        dataloader = make_dataloader((input, target), batch_size, shuffle, num_workers)
-        log = self.fit_dataloader(dataloader, epochs, callbacks, verbose)
+        dataloader = self.make_dataloader((input, target), batch_size, shuffle, num_workers, **kwargs)
+        log = self.fit_dataloader(dataloader, epochs, callbacks, verbose, metrics)
         return log
 
     # legacy
@@ -188,9 +247,36 @@ class Model(object):
     fit_tensor = fit
 
     def score_in_batches(self, data, score_func=None, batch_size=8224, eval_=True, mean=True,
-                         num_workers=0, shuffle=False):
+                         num_workers=0, shuffle=False, make_dataloader=None, **kwargs):
+        """Used to score a dataset in batches.
+        If score_func is None, this use the loss function.
+        If make_dataloader is None, we use self.make_dataloader_predict, unless score_func is also
+        None, in which we use self.make_dataloader.
+        
+        Arguments:
+            data {np.array, tensor, tuple, dataloader} -- Data in the form a datloader, or arrarys/tensors.
+        
+        Keyword Arguments:
+            score_func {func} -- Function used for scoreing. If None, we use self.loss. (default: {None})
+            batch_size {int} -- Batch size (default: {8224})
+            eval_ {bool} -- Eval mode of the net. (default: {True})
+            mean {bool} -- If True, we return the mean. (default: {True})
+            num_workers {int} -- Number of workers for the dataloader. (default: {0})
+            shuffle {bool} -- If the data should be shuffled (default: {False})
+            make_dataloader {func} -- Function for making a dataloder.
+                If None, we use make_dataloader_predict as long as score_func is not None. (default: {None})
+            **kwargs -- Are passed to make_dataloader function.
+        
+        Returns:
+            np.array -- Scores
+        """
+        if make_dataloader is None:
+            if score_func is None:
+                make_dataloader = self.make_dataloader
+            else:
+                make_dataloader = self.make_dataloader_predict
         if data.__class__ in (list, tuple, TupleLeaf):
-            data = make_dataloader(data, batch_size, shuffle, num_workers)
+            data = make_dataloader(data, batch_size, shuffle, num_workers, **kwargs)
         scores = self.score_in_batches_dataloader(data, score_func, eval_, mean)
         return scores
     
@@ -241,7 +327,7 @@ class Model(object):
         Returns:
             [TupleLeaf, np.ndarray or tensor] -- Predictions
         """
-        dataloader = make_dataloader(input, batch_size, shuffle=False, num_workers=num_workers)
+        dataloader = self.make_dataloader_predict(input, batch_size, shuffle=False, num_workers=num_workers)
         preds = self.predict_dataloader(dataloader, return_numpy, eval_=True, grads=False,
                                         move_to_cpu=False)
         return preds

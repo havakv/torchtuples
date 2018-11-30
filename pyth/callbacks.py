@@ -188,7 +188,7 @@ class PlotProgress(Callback):
         return df
 
 
-class TrainingLogger(Callback):
+class TrainingLogger_old(Callback):
     '''Holding statistics about training.'''
     def __init__(self, verbose=1):
         self.epoch = 0
@@ -263,6 +263,29 @@ class TrainingLogger(Callback):
     def plot(self, colnames=None, **kwargs):
         return self.to_pandas(colnames).plot(**kwargs)
 
+class TrainingLogger(TrainingLogger_old):
+    def get_measures(self):
+        measures = self.monitors
+        if self.verbose.__class__ in [dict, OrderedDict]:
+            measures = OrderedDict(measures, **self.verbose)
+        string = ''
+        for prefix, mm in measures.items():
+            for name, score in mm.to_pandas().iloc[-1].items(): # slow but might not matter
+                string += '\t%s:' % (prefix + name)
+                string += ' %.4f,' % score
+        return string[:-1]
+
+    def to_pandas(self, colnames=None):
+        '''Get data in dataframe.
+        '''
+        assert colnames is None, 'Not implemented'
+        dfs = []
+        for prefix, mm in self.monitors.items():
+            df = mm.to_pandas()
+            df.columns = prefix + df.columns
+            dfs.append(df)
+        df = pd.concat(dfs, axis=1)
+        return df
 
 class EarlyStopping(Callback):
     '''Stop training when monitored quantity has stopped improving.
@@ -348,7 +371,7 @@ class MonitorBase(Callback):
         '''
         # raise NotImplementedError('Need to implement this method!')
         # return [NotImplemented]
-        pass
+        (None,)
     
     def on_epoch_end(self):
         if self.epoch % self.per_epoch != 0:
@@ -375,6 +398,7 @@ class MonitorBase(Callback):
                 .assign(epoch=np.array(self.epochs))
                 .set_index('epoch'))
 
+
 class MonitorLoss(MonitorBase):
     def __init__(self, data, per_epoch=1, **kwargs):
         monitor_funcs = {'loss': self._identity}
@@ -389,6 +413,48 @@ class MonitorLoss(MonitorBase):
     
     def get_score_inputs(self):
         return [self.model.score_in_batches(self.data, **self.kwargs)]
+
+from collections import defaultdict
+class MonitorTrainMetrics(Callback):
+    def __init__(self, per_epoch=1):
+        self.scores = defaultdict(lambda: defaultdict(list))
+        self.per_epoch = per_epoch
+        self.epoch = -1
+
+    def on_fit_start(self):
+        self.batch_metrics = defaultdict(list)
+    
+    def on_batch_end(self):
+        for name, val in self.model.batch_metrics.items():
+            self.batch_metrics[name].append(val.item())
+
+    def on_epoch_end(self):
+        self.epoch += 1
+        if self.epoch % self.per_epoch != 0:
+            return False
+        for name, vals in self.batch_metrics.items():
+            self.scores[name]['epoch'].append(self.epoch)
+            self.scores[name][name].append(np.mean(vals))
+        return False
+
+    def to_pandas(self, colnames=None):
+        '''Return scores as a pandas dataframe'''
+        # if colnames is not None:
+        #     if colnames.__class__ is str:
+        #         colnames = [colnames]
+        # else:
+        #     colnames = self.scores.keys()
+        assert colnames is None, "Not implemented"
+        scores = [pd.Series(score[name], index=score['epoch']).rename(name)
+                  for name, score in self.scores.items()]
+        scores = pd.concat(scores, axis=1)
+        if type(scores) is pd.Series:
+            scores = scores.to_frame()
+        return scores
+        # scores = np.array(self.scores).transpose()
+        # return (pd.DataFrame(scores, columns=colnames)
+        #         .assign(epoch=np.array(self.epochs))
+        #         .set_index('epoch'))
 
 
 class MonitorTrainLoss(MonitorBase):
