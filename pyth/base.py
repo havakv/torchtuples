@@ -65,7 +65,7 @@ class Model(object):
         #     if metrics.get('loss'):
         #         raise ValueError(f"The 'loss' keyword is reserved for the loss function.")
         #     self.metrics.update(metrics)
-        self.train_loss = cb.MonitorTrainLoss()
+        # self.train_loss = cb.MonitorTrainLoss()
         self.log = cb.TrainingLogger()
         # self.log.monitors = OrderedDict(train_loss=self.train_loss)
         self.train_metrics = cb._MonitorFitMetricsTrainData()
@@ -253,6 +253,27 @@ class Model(object):
     # legacy
     fit_numpy = fit
     fit_tensor = fit
+
+    def lr_finder(self, input, target, batch_size=256, lr_min=1e-7, lr_max=10, n_steps=100, tolerance=10.,
+                  callbacks=None, verbose=False, num_workers=0, shuffle=True, **kwargs):
+        if callbacks is None:
+            callbacks = []
+        lr_finder = cb.LRFinder(lr_min, lr_max, n_steps, tolerance)
+        callbacks.append(lr_finder)
+        epochs = n_steps
+        self.fit(input, target, batch_size, epochs, callbacks, verbose, num_workers,
+                 shuffle, **kwargs)
+        return lr_finder
+    
+    def lr_finder_dataloader(self, dataloader, lr_min=1e-7, lr_max=10, n_steps=100, tolerance=10.,
+                             callbacks=None, verbose=False):
+        if callbacks is None:
+            callbacks = []
+        lr_finder = cb.LRFinder(lr_min, lr_max, n_steps, tolerance)
+        callbacks.append(lr_finder)
+        epochs = n_steps
+        self.fit_dataloader(dataloader, epochs, callbacks, verbose)
+        return lr_finder
 
     def score_in_batches(self, data, score_func=None, batch_size=8224, eval_=True, mean=True,
                          num_workers=0, shuffle=False, make_dataloader=None, numpy=True, **kwargs):

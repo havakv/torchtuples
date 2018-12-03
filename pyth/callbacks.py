@@ -339,7 +339,7 @@ class EarlyStopping(Callback):
         return stop_signal
 
 
-class MonitorBase(Callback):
+class MonitorBase_old(Callback):
     '''Abstract class for monitoring metrics during training progress.
 
     Need to implement 'get_score_inputs' function to make it work.
@@ -405,7 +405,7 @@ class MonitorBase(Callback):
                 .set_index('epoch'))
 
 
-class MonitorLoss(MonitorBase):
+class MonitorLoss(MonitorBase_old):
     def __init__(self, data, per_epoch=1, **kwargs):
         monitor_funcs = {'loss': self._identity}
         super().__init__(monitor_funcs, per_epoch)
@@ -421,7 +421,55 @@ class MonitorLoss(MonitorBase):
         return [self.model.score_in_batches(self.data, **self.kwargs)]
 
 from collections import defaultdict
-class _MonitorFitMetricsTrainData(Callback):
+
+class MonitorMetrics(Callback):
+    def __init__(self):
+        self.scores = dict()
+        self.epoch = -1
+
+    def on_epoch_end(self):
+        self.epoch += 1
+    
+    def append_score(self, name, val):
+        scores = self.scores.get(name, {'epoch': [], 'score': []})
+        scores['epoch'].append(self.epoch)
+        scores['score'].append(val)
+        self.scores[name] = scores
+
+    def to_pandas(self):
+        '''Return scores as a pandas dataframe'''
+        scores = [pd.Series(score['score'], index=score['epoch']).rename(name)
+                  for name, score in self.scores.items()]
+        scores = pd.concat(scores, axis=1)
+        if type(scores) is pd.Series:
+            scores = scores.to_frame()
+        return scores
+
+class _MonitorFitMetricsTrainData(MonitorMetrics):
+    def __init__(self, per_epoch=1):
+        super().__init__()
+        # self.scores = defaultdict(lambda: defaultdict(list))
+        self.per_epoch = per_epoch
+
+    def on_fit_start(self):
+        self.batch_metrics = defaultdict(list)
+    
+    def on_batch_end(self):
+        for name, score in self.model.batch_metrics.items():
+            self.batch_metrics[name].append(score.item())
+
+    def on_epoch_end(self):
+        super().on_epoch_end()
+        # self.epoch += 1
+        if self.epoch % self.per_epoch != 0:
+            return False
+        for name, vals in self.batch_metrics.items():
+            self.append_score(name, np.mean(vals))
+            # self.scores[name]['epoch'].append(self.epoch)
+            # self.scores[name][name].append(np.mean(vals))
+        return False
+
+class ___MonitorFitMetricsTrainData(Callback):
     def __init__(self, per_epoch=1):
         self.scores = defaultdict(lambda: defaultdict(list))
         self.per_epoch = per_epoch
@@ -462,13 +510,15 @@ class _MonitorFitMetricsTrainData(Callback):
         #         .assign(epoch=np.array(self.epochs))
         #         .set_index('epoch'))
 
-class MonitorFitMetrics(Callback):
+class MonitorFitMetrics(MonitorMetrics):
     def __init__(self, dataloader=None, per_epoch=1):
+        super().__init__()
         self.dataloader = dataloader
-        self.scores = defaultdict(lambda: defaultdict(list))
+        # self.scores = defaultdict(lambda: defaultdict(list))
+        # self.scores = dict()
         self.per_epoch = per_epoch
-        self.epoch = -1
-    
+        # self.epoch = -1
+
     @property
     def dataloader(self):
         return self._dataloader
@@ -477,11 +527,9 @@ class MonitorFitMetrics(Callback):
     def dataloader(self, dataloader):
         self._dataloader = dataloader
 
-    def on_fit_start(self):
-        self.batch_metrics = defaultdict(list)
-    
     def on_epoch_end(self):
-        self.epoch += 1
+        super().on_epoch_end()
+        # self.epoch += 1
         if self.epoch % self.per_epoch != 0:
             return False
         if self.dataloader is None:
@@ -489,14 +537,48 @@ class MonitorFitMetrics(Callback):
         else:
             # scores = self.model.score_in_batches(self.data, batch_size=self.batch_size)
             scores = self.model.score_in_batches_dataloader(self.dataloader)
-        for name, vals in scores.items():
-            self.scores[name]['epoch'].append(self.epoch)
-            self.scores[name][name].append(np.mean(vals))
+        for name, val in scores.items():
+            self.append_score(name, val)
+            # self.scores[name]['epoch'].append(self.epoch)
+            # self.scores[name][name].append(np.mean(vals))
         return False
 
-    def to_pandas(self, colnames=None):
+    # def get_scores(self, name):
+    #     score = self.scores.get(name)
+    #     if score is None:
+    #         return ValueError(f"No score named {name}.")
+    #     return score.get(name)
+
+    # def to_pandas(self, colnames=None):
+    #     '''Return scores as a pandas dataframe'''
+    #     assert colnames is None, "Not implemented"
+    #     scores = [pd.Series(score[name], index=score['epoch']).rename(name)
+    #               for name, score in self.scores.items()]
+    #     scores = pd.concat(scores, axis=1)
+    #     if type(scores) is pd.Series:
+    #         scores = scores.to_frame()
+    #     return scores
+
+
+class MonitorTrainMetrics(Callback):
+    '''Monitor metrics for training loss.
+
+    Parameters:
+        per_epoch: How often to calculate.
+    '''
+    # def __init__(self, per_epoch=1):
+        # monitor_funcs = {'loss': self.get_loss}
+        # super().__init__(monitor_funcs, per_epoch)
+    
+    # def get_loss(self, *args, **kwargs):
+    #     loss = np.mean(self.batch_loss)
+    #     return loss
+    @property
+    def scores(self):
+        return self.model.train_metrics.scores
+    
+    def to_pandas(self):
         '''Return scores as a pandas dataframe'''
-        assert colnames is None, "Not implemented"
         scores = [pd.Series(score[name], index=score['epoch']).rename(name)
                   for name, score in self.scores.items()]
         scores = pd.concat(scores, axis=1)
@@ -504,87 +586,86 @@ class MonitorFitMetrics(Callback):
             scores = scores.to_frame()
         return scores
 
+# class MonitorTrainLoss(MonitorBase):
+#     '''Monitor metrics for training loss.
 
-class MonitorTrainLoss(MonitorBase):
-    '''Monitor metrics for training loss.
-
-    Parameters:
-        per_epoch: How often to calculate.
-    '''
-    def __init__(self, per_epoch=1):
-        monitor_funcs = {'loss': self.get_loss}
-        super().__init__(monitor_funcs, per_epoch)
+#     Parameters:
+#         per_epoch: How often to calculate.
+#     '''
+#     def __init__(self, per_epoch=1):
+#         monitor_funcs = {'loss': self.get_loss}
+#         super().__init__(monitor_funcs, per_epoch)
     
-    def get_loss(self, *args, **kwargs):
-        loss = np.mean(self.batch_loss)
-        return loss
+#     def get_loss(self, *args, **kwargs):
+#         loss = np.mean(self.batch_loss)
+#         return loss
 
-    def get_score_inputs(self):
-        return None, None
+#     def get_score_inputs(self):
+#         return None, None
 
-    def on_fit_start(self):
-        self.batch_loss = []
+#     def on_fit_start(self):
+#         self.batch_loss = []
 
-    def on_batch_end(self):
-        self.batch_loss.append(self.model.batch_loss.item())
+#     def on_batch_end(self):
+#         self.batch_loss.append(self.model.batch_loss.item())
 
-    def on_epoch_end(self):
-        stop_signal = super().on_epoch_end()
-        self.batch_loss = []
-        return stop_signal
-
-
-class MonitorXy(MonitorBase):
-    '''Monitor metrics for classification and regression.
-    Same as MonitorBase but we input a pair, X, y instead of data.
-
-    For survival methods, see e.g. MonitorCox.
-
-    Parameters:
-        X: Numpy array with features.
-        y: Numpy array with labels.
-        monitor_funcs: Function, list, or dict of functions giving quiatities that should
-            be monitored.
-            The function takes argumess (df, preds) and should return a score.
-        batch_size: Batch size used for calculating the scores.
-        **kwargs: Can be passed to predict method.
-    '''
-    def __init__(self, X, y, monitor_funcs, per_epoch=1, batch_size=512, **kwargs):
-        self.X, self.y = X, y
-        self.kwargs = kwargs
-        super().__init__(monitor_funcs, per_epoch, batch_size)
-
-    def get_score_inputs(self):
-        '''This function should create arguments to the monitor function.
-        Typically it can return a tuple with (y_true, preds), to calculate e.g. auc.
-        '''
-        preds = self.model.predict(self.X, self.batch_size, **self.kwargs)
-        return self.y, preds
+#     def on_epoch_end(self):
+#         stop_signal = super().on_epoch_end()
+#         self.batch_loss = []
+#         return stop_signal
 
 
-class MonitorSklearn(MonitorXy):
-    '''Class for monitoring metrics of from sklearn metrics
+# class MonitorXy(MonitorBase):
+#     '''Monitor metrics for classification and regression.
+#     Same as MonitorBase but we input a pair, X, y instead of data.
 
-    Parameters:
-        X: Numpy array with features.
-        y: Numpy array with labels.
-        monitor: Name for method in sklearn.metrics.
-            E.g. 'log_loss', or pass sklearn.metrics.log_loss.
-            For additional parameter, specify the function with a lambda statemetn.
-                e.g. {'accuracy': lambda y, p: metrics.accuracy_score(y, p > 0.5)}
-        batch_size: Batch size used for calculating the scores.
-        **kwargs: Can be passed to predict method.
-    '''
-    def __init__(self, X, y, monitor, per_epoch=1, batch_size=512, **kwargs):
-        if monitor.__class__ is str:
-            monitor = {monitor: monitor}
-        elif monitor.__class__ is list:
-            monitor = {mon if mon.__class__ is str else str(i): mon
-                       for i, mon in enumerate(monitor)}
+#     For survival methods, see e.g. MonitorCox.
 
-        monitor = {name: getattr(metrics, mon) if mon.__class__ == str else mon
-                   for name, mon in monitor.items()}
-        super().__init__(X, y, monitor, per_epoch, batch_size)
+#     Parameters:
+#         X: Numpy array with features.
+#         y: Numpy array with labels.
+#         monitor_funcs: Function, list, or dict of functions giving quiatities that should
+#             be monitored.
+#             The function takes argumess (df, preds) and should return a score.
+#         batch_size: Batch size used for calculating the scores.
+#         **kwargs: Can be passed to predict method.
+#     '''
+#     def __init__(self, X, y, monitor_funcs, per_epoch=1, batch_size=512, **kwargs):
+#         self.X, self.y = X, y
+#         self.kwargs = kwargs
+#         super().__init__(monitor_funcs, per_epoch, batch_size)
+
+#     def get_score_inputs(self):
+#         '''This function should create arguments to the monitor function.
+#         Typically it can return a tuple with (y_true, preds), to calculate e.g. auc.
+#         '''
+#         preds = self.model.predict(self.X, self.batch_size, **self.kwargs)
+#         return self.y, preds
+
+
+# class MonitorSklearn(MonitorXy):
+#     '''Class for monitoring metrics of from sklearn metrics
+
+#     Parameters:
+#         X: Numpy array with features.
+#         y: Numpy array with labels.
+#         monitor: Name for method in sklearn.metrics.
+#             E.g. 'log_loss', or pass sklearn.metrics.log_loss.
+#             For additional parameter, specify the function with a lambda statemetn.
+#                 e.g. {'accuracy': lambda y, p: metrics.accuracy_score(y, p > 0.5)}
+#         batch_size: Batch size used for calculating the scores.
+#         **kwargs: Can be passed to predict method.
+#     '''
+#     def __init__(self, X, y, monitor, per_epoch=1, batch_size=512, **kwargs):
+#         if monitor.__class__ is str:
+#             monitor = {monitor: monitor}
+#         elif monitor.__class__ is list:
+#             monitor = {mon if mon.__class__ is str else str(i): mon
+#                        for i, mon in enumerate(monitor)}
+
+#         monitor = {name: getattr(metrics, mon) if mon.__class__ == str else mon
+#                    for name, mon in monitor.items()}
+#         super().__init__(X, y, monitor, per_epoch, batch_size)
 
 
 class ClipGradNorm(Callback):
@@ -759,7 +840,8 @@ class WeightDecay(Callback):
             weight_decay = self.weight_decay
         for group in self.model.optimizer.param_groups:
             lr = group['lr']
-            alpha = group.get('initial_lr', 1.)
+            # alpha = group.get('initial_lr', 1.)
+            alpha = group.get('initial_lr', lr)
             eta = lr / alpha
             for p in group['params']:
                 if p.grad is not None:
@@ -776,6 +858,7 @@ class EarlyStoppingCycle(Callback):
     Parameters:
         mm_obj: Monitor object, where first metric is used for early stopping.
             E.g. MonitorSurvival(df_val, 'cindex').
+        get_score: Function for obtaining current scores. If None, we use validation loss.
         minimize: If we are to minimize or maximize monitor.
         min_delta: Minimum change in the monitored quantity to qualify as an improvement,
             i.e. an absolute change of less than min_delta, will count as no improvement.
@@ -783,9 +866,12 @@ class EarlyStoppingCycle(Callback):
         model_file_path: If spesified, the model weights will be stored whever a better score
             is achieved.
     '''
-    def __init__(self, sched_cb, mm_obj, minimize=True, min_delta=0, patience=1, 
+    # def __init__(self, sched_cb, mm_obj, minimize=True, min_delta=0, patience=1, 
+    #              min_cycles=4, model_file_path=None):
+    def __init__(self, sched_cb, get_score=None, minimize=True, min_delta=0, patience=1, 
                  min_cycles=4, model_file_path=None):
-        self.mm_obj = mm_obj
+        # self.mm_obj = mm_obj
+        self.get_score = get_score
         self.minimize = minimize
         self.min_delta = min_delta
         self.patience = patience
@@ -794,11 +880,17 @@ class EarlyStoppingCycle(Callback):
         self.sched_cb = sched_cb
         self.cur_best = np.inf if self.minimize else -np.inf
         self.cur_best_cycle_nb = None
+
+    def on_fit_start(self):
+        if self.get_score is None:
+            # self.get_score = lambda: self.model.val_metrics.get_scores('loss')[-1]
+            self.get_score = lambda: self.model.val_metrics.scores['loss']['score'][-1]
         
     def on_epoch_end(self):
         etas = self.sched_cb.get_etas()
         cycle_nb = etas.count(1.) - 1
-        score = self.mm_obj.scores[0][-1]
+        # score = self.mm_obj.scores[0][-1]
+        score = self.get_score()
 
         if self.minimize:
             if score < (self.cur_best - self.min_delta):
