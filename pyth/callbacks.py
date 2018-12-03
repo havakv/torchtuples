@@ -15,6 +15,7 @@ from torch import optim
 # from .utils import to_cuda
 from .optim import AdamW
 from . import lr_scheduler 
+import pyth
 
 
 class CallbackHandler(object):
@@ -23,9 +24,13 @@ class CallbackHandler(object):
     Parameters:
         callbacks_list: List containing callback objects.
     '''
-    def __init__(self, train_loss, log, callbacks=None):
+    # def __init__(self, train_loss, log, callbacks=None):
+    def __init__(self, train_metrics, log, val_metrics=None, callbacks=None):
         self.callbacks = OrderedDict()
-        self.callbacks['train_loss'] = train_loss
+        # self.callbacks['train_loss'] = train_loss
+        self.callbacks['train_metrics'] = train_metrics
+        if val_metrics:
+            self.callbacks['val_metrics'] = val_metrics
         self.callbacks['log'] = log
 
         if type(callbacks) in (list, tuple):
@@ -271,8 +276,9 @@ class TrainingLogger(TrainingLogger_old):
         string = ''
         for prefix, mm in measures.items():
             for name, score in mm.to_pandas().iloc[-1].items(): # slow but might not matter
-                string += '\t%s:' % (prefix + name)
-                string += ' %.4f,' % score
+                if (score is not None) and (np.isnan(score) == False):
+                    string += '\t%s:' % (prefix + name)
+                    string += ' %.4f,' % score
         return string[:-1]
 
     def to_pandas(self, colnames=None):
@@ -415,7 +421,7 @@ class MonitorLoss(MonitorBase):
         return [self.model.score_in_batches(self.data, **self.kwargs)]
 
 from collections import defaultdict
-class MonitorTrainMetrics(Callback):
+class _MonitorFitMetricsTrainData(Callback):
     def __init__(self, per_epoch=1):
         self.scores = defaultdict(lambda: defaultdict(list))
         self.per_epoch = per_epoch
@@ -425,8 +431,8 @@ class MonitorTrainMetrics(Callback):
         self.batch_metrics = defaultdict(list)
     
     def on_batch_end(self):
-        for name, val in self.model.batch_metrics.items():
-            self.batch_metrics[name].append(val.item())
+        for name, score in self.model.batch_metrics.items():
+            self.batch_metrics[name].append(score.item())
 
     def on_epoch_end(self):
         self.epoch += 1
@@ -455,6 +461,48 @@ class MonitorTrainMetrics(Callback):
         # return (pd.DataFrame(scores, columns=colnames)
         #         .assign(epoch=np.array(self.epochs))
         #         .set_index('epoch'))
+
+class MonitorFitMetrics(Callback):
+    def __init__(self, dataloader=None, per_epoch=1):
+        self.dataloader = dataloader
+        self.scores = defaultdict(lambda: defaultdict(list))
+        self.per_epoch = per_epoch
+        self.epoch = -1
+    
+    @property
+    def dataloader(self):
+        return self._dataloader
+    
+    @dataloader.setter
+    def dataloader(self, dataloader):
+        self._dataloader = dataloader
+
+    def on_fit_start(self):
+        self.batch_metrics = defaultdict(list)
+    
+    def on_epoch_end(self):
+        self.epoch += 1
+        if self.epoch % self.per_epoch != 0:
+            return False
+        if self.dataloader is None:
+            scores = {name: np.nan for name in self.model.metrics.keys()}
+        else:
+            # scores = self.model.score_in_batches(self.data, batch_size=self.batch_size)
+            scores = self.model.score_in_batches_dataloader(self.dataloader)
+        for name, vals in scores.items():
+            self.scores[name]['epoch'].append(self.epoch)
+            self.scores[name][name].append(np.mean(vals))
+        return False
+
+    def to_pandas(self, colnames=None):
+        '''Return scores as a pandas dataframe'''
+        assert colnames is None, "Not implemented"
+        scores = [pd.Series(score[name], index=score['epoch']).rename(name)
+                  for name, score in self.scores.items()]
+        scores = pd.concat(scores, axis=1)
+        if type(scores) is pd.Series:
+            scores = scores.to_frame()
+        return scores
 
 
 class MonitorTrainLoss(MonitorBase):

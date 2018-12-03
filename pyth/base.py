@@ -1,7 +1,7 @@
 
 """Model for fitting torch models.
 """
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 import warnings
 import numpy as np  # shoul be remved
 import torch
@@ -68,8 +68,9 @@ class Model(object):
         self.train_loss = cb.MonitorTrainLoss()
         self.log = cb.TrainingLogger()
         # self.log.monitors = OrderedDict(train_loss=self.train_loss)
-        self.train_metrics = cb.MonitorTrainMetrics()
-        self.log.monitors = OrderedDict(train_=self.train_metrics)
+        self.train_metrics = cb._MonitorFitMetricsTrainData()
+        self.val_metrics = cb.MonitorFitMetrics()
+        self.log.monitors = OrderedDict(train_=self.train_metrics, val_=self.val_metrics)
     
     @staticmethod
     def _device_from__init__(device):
@@ -126,6 +127,19 @@ class Model(object):
         input, target = next(iter(dataloader))
         self.fit_info['input'] = _tuple_info(input)
         # self.fit_info['target'] = _tuple_info(target)
+    
+    def _to_device(self, data):
+        """Move data to self.device.
+        
+        Arguments:
+            data {tensor or tuple} -- Data
+        
+        Returns:
+            tensor or tuple -- Data moved to device.
+        """
+        if data is None:
+            return tuplefy(data)
+        return tuplefy(data).to_device(self.device)
 
     def compute_metrics(self, input, target, metrics):
         """Function for computing loss.
@@ -148,21 +162,9 @@ class Model(object):
         res = {name: metric(*out, *target) for name, metric in metrics.items()}
         return res
         # return self.loss(*out, *target)
-    
-    def _to_device(self, data):
-        """Move data to self.device.
-        
-        Arguments:
-            data {tensor or tuple} -- Data
-        
-        Returns:
-            tensor or tuple -- Data moved to device.
-        """
-        if data is None:
-            return tuplefy(data)
-        return tuplefy(data).to_device(self.device)
 
-    def fit_dataloader(self, dataloader, epochs=1, callbacks=None, verbose=True, metrics=None):
+    def fit_dataloader(self, dataloader, epochs=1, callbacks=None, verbose=True, metrics=None,
+                       val_dataloader=None):
         """Fit a dataloader object.
         See 'fit' for tensors and np.arrays.
         
@@ -193,7 +195,8 @@ class Model(object):
         self._setup_train_info(dataloader, verbose, callbacks)
         self.log.verbose = verbose
         # self.callbacks = cb.CallbackHandler(self.train_loss, self.log, callbacks)
-        self.callbacks = cb.CallbackHandler(self.train_metrics, self.log, callbacks)
+        self.val_metrics.dataloader = val_dataloader
+        self.callbacks = cb.CallbackHandler(self.train_metrics, self.log, self.val_metrics, callbacks)
         self.callbacks.give_model(self)
         stop_signal = self.callbacks.on_fit_start()
         if stop_signal:
@@ -219,7 +222,8 @@ class Model(object):
         return self.log
 
     def fit(self, input, target, batch_size=256, epochs=1, callbacks=None, verbose=True,
-            num_workers=0, shuffle=True, metrics=None, **kwargs):
+            num_workers=0, shuffle=True, metrics=None, val_data=None, val_batch_size=8224,
+            **kwargs):
         """Fit  model with inputs and targets.
         
         Arguments:
@@ -239,7 +243,11 @@ class Model(object):
             TrainingLogger -- Training log
         """
         dataloader = self.make_dataloader((input, target), batch_size, shuffle, num_workers, **kwargs)
-        log = self.fit_dataloader(dataloader, epochs, callbacks, verbose, metrics)
+        val_dataloader = val_data
+        if type(val_data) in (list, tuple, TupleLeaf):
+            val_dataloader = make_dataloader(val_data, val_batch_size, shuffle=False,
+                                             num_workers=num_workers, **kwargs)
+        log = self.fit_dataloader(dataloader, epochs, callbacks, verbose, metrics, val_dataloader)
         return log
 
     # legacy
@@ -247,7 +255,7 @@ class Model(object):
     fit_tensor = fit
 
     def score_in_batches(self, data, score_func=None, batch_size=8224, eval_=True, mean=True,
-                         num_workers=0, shuffle=False, make_dataloader=None, **kwargs):
+                         num_workers=0, shuffle=False, make_dataloader=None, numpy=True, **kwargs):
         """Used to score a dataset in batches.
         If score_func is None, this use the loss function.
         If make_dataloader is None, we use self.make_dataloader_predict, unless score_func is also
@@ -277,10 +285,10 @@ class Model(object):
                 make_dataloader = self.make_dataloader_predict
         if data.__class__ in (list, tuple, TupleLeaf):
             data = make_dataloader(data, batch_size, shuffle, num_workers, **kwargs)
-        scores = self.score_in_batches_dataloader(data, score_func, eval_, mean)
+        scores = self.score_in_batches_dataloader(data, score_func, eval_, mean, numpy)
         return scores
     
-    def score_in_batches_dataloader(self, dataloader, score_func=None, eval_=True, mean=True):
+    def score_in_batches_dataloader(self, dataloader, score_func=None, eval_=True, mean=True, numpy=True):
         '''Score a dataset in batches.
 
         Parameters:
@@ -296,13 +304,26 @@ class Model(object):
         with torch.no_grad():
             for input, target in dataloader:
                 if score_func is None:
-                    score = self.compute_loss(input, target)
+                    # score = self.compute_loss(input, target)
+                    score = self.compute_metrics(input, target, self.metrics)
                 else:
                     warnings.warn(f"score_func {score_func} probably doesn't work... Not implemented")
                     score = score_func(self, input, target)
                 batch_scores.append(score)
         if eval_:
             self.net.train()
+        if type(batch_scores[0]) is dict:
+            scores = defaultdict(list)
+            for bs in batch_scores:
+                for name, score in bs.items():
+                    scores[name].append(score)
+            scores = {name: torch.tensor(score) for name, score in scores.items()}
+            if mean:
+                scores = {name: score.mean() for name, score in scores.items()}
+            if numpy:
+                # scores = {name: tuplefy(score).to_numpy()[0] for name, score in scores.items()}
+                scores = {name: score.item() for name, score in scores.items()}
+            return scores
         if mean:
             batch_scores = [score.item() for score in batch_scores]
             return np.mean(batch_scores)
