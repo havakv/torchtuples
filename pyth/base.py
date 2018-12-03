@@ -245,8 +245,8 @@ class Model(object):
         dataloader = self.make_dataloader((input, target), batch_size, shuffle, num_workers, **kwargs)
         val_dataloader = val_data
         if type(val_data) in (list, tuple, TupleLeaf):
-            val_dataloader = make_dataloader(val_data, val_batch_size, shuffle=False,
-                                             num_workers=num_workers, **kwargs)
+            val_dataloader = self.make_dataloader(val_data, val_batch_size, shuffle=False,
+                                                  num_workers=num_workers, **kwargs)
         log = self.fit_dataloader(dataloader, epochs, callbacks, verbose, metrics, val_dataloader)
         return log
 
@@ -391,7 +391,7 @@ class Model(object):
         Returns:
             [TupleLeaf, np.ndarray or tensor] -- Predictions
         """
-        if hasattr(self, 'fit_info'):
+        if hasattr(self, 'fit_info') and (self.make_dataloader is self.make_dataloader_predict):
             input = tuplefy(next(iter(dataloader)))
             input_train = self.fit_info['input']
             if input.to_levels() != input_train['levels']:
