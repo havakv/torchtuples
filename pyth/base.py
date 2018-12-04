@@ -100,9 +100,9 @@ class Model(object):
     def optimizer(self, optimizer):
         self._optimizer = optimizer
         if callable(self._optimizer):
-            self._optimizer = self._optimizer(parameters=self.net.parameters())
+            self._optimizer = self._optimizer(params=self.net.parameters())
         if not isinstance(self._optimizer, OptimWrap):
-            self._optimizer = OptimWrap(optimizer)
+            self._optimizer = OptimWrap(self._optimizer)
 
     @staticmethod
     def make_dataloader(data, batch_size, shuffle, num_workers=0, **kwargs):
