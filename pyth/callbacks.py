@@ -13,10 +13,74 @@ import torch
 from torch import optim
 # from torch.autograd import Variable
 # from .utils import to_cuda
-from .optim import AdamW
+# from .optim import AdamW
 from . import lr_scheduler 
 import pyth
 
+class SubCallbackHandler:
+    def __init__(self, callbacks):
+        self.callbacks = OrderedDict()
+        if type(callbacks) in (list, tuple):
+            cb_as_dict = OrderedDict()
+            for cb in callbacks:
+                cb_as_dict[self._make_name(cb)] = cb
+            callbacks = cb_as_dict
+        self.callbacks = OrderedDict(callbacks)
+
+    def _make_name(self, obj):
+        name = obj.__class__.__name__
+        i = 0
+        while name in self.callbacks.keys():
+            name = name + '_' + str(i)
+            i += 1
+        return name
+    
+    def __getitem__(self, name):
+        return self.callbacks[name]
+    
+    def __setitem__(self, name, callback):
+        return self.append(callback, name)
+    
+    def items(self):
+        return self.callbacks.items()
+    
+    def keys(self):
+        return self.callbacks.keys()
+    
+    def values(self):
+        return self.callbacks.values()
+    
+    def __len__(self):
+        return len(self.callbacks)
+
+    def apply_callbacks(self, func):
+        stop_signal = False
+        for c in self.values():
+            stop = func(c)
+            stop = stop if stop else False
+            stop_signal += stop
+        return stop_signal
+
+    def give_model(self, model):
+        self.model = model
+        stop_signal = self.apply_callbacks(lambda x: x.give_model(model))
+        return stop_signal
+
+    def on_fit_start(self):
+        stop_signal = self.apply_callbacks(lambda x: x.on_fit_start())
+        return stop_signal
+
+    def before_step(self):
+        stop_signal = self.apply_callbacks(lambda x: x.before_step())
+        return stop_signal
+
+    def on_batch_end(self):
+        stop_signal = self.apply_callbacks(lambda x: x.on_batch_end())
+        return stop_signal
+
+    def on_epoch_end(self):
+        stop_signal = self.apply_callbacks(lambda x: x.on_epoch_end())
+        return stop_signal
 
 class CallbackHandler(object):
     '''Object for holding all callbacks.
@@ -25,9 +89,10 @@ class CallbackHandler(object):
         callbacks_list: List containing callback objects.
     '''
     # def __init__(self, train_loss, log, callbacks=None):
-    def __init__(self, train_metrics, log, val_metrics=None, callbacks=None):
+    def __init__(self, optimizer, train_metrics, log, val_metrics=None, callbacks=None):
         self.callbacks = OrderedDict()
         # self.callbacks['train_loss'] = train_loss
+        self.callbacks['optimizer'] = optimizer
         self.callbacks['train_metrics'] = train_metrics
         if val_metrics:
             self.callbacks['val_metrics'] = val_metrics
@@ -814,22 +879,37 @@ class WeightDecay(Callback):
     def __init__(self, weight_decay, normalized=False, nb_epochs=None):
         self.weight_decay = weight_decay
         self.normalized = normalized
-        if self.normalized:
-            if not ((type(nb_epochs) is int) or callable(nb_epochs)):
-                raise ValueError(f"Need nb_epochs to be callable or int, not {nb_epochs}")
+        # if self.normalized:
+        #     if not ((type(nb_epochs) is int) or callable(nb_epochs)):
+        #         raise ValueError(f"Need nb_epochs to be callable or int, not {nb_epochs}")
         self.nb_epochs = nb_epochs
     
     def on_fit_start(self):
         self._batches_per_epoch = self.model.fit_info['batches_per_epoch']
+
+    @property
+    def nb_epochs(self):
+        if type(self._nb_epochs) is int:
+            return self._nb_epochs
+        elif callable(self._nb_epochs):
+            return self._nb_epochs()
+        raise RuntimeError('nb_epochs needs to be callable or int')
+
+    @nb_epochs.setter
+    def nb_epochs(self, nb_epochs):
+        if self.normalized:
+            if not ((type(nb_epochs) is int) or callable(nb_epochs)):
+                raise ValueError(f"Need nb_epochs to be callable or int, not {type(nb_epochs)}")
+        self._nb_epochs = nb_epochs
     
     def _normalized_weight_decay(self):
-        if type(self.nb_epochs) is int:
-            nb_epochs = self.nb_epochs
-        elif callable(self.nb_epochs):
-            nb_epochs = self.nb_epochs()
-        else:
-            raise RuntimeError('nb_epochs needs to be callable or int')
-        norm_const = math.sqrt(1 / (self._batches_per_epoch * nb_epochs))
+        # if type(self.nb_epochs) is int:
+        #     nb_epochs = self.nb_epochs
+        # elif callable(self.nb_epochs):
+        #     nb_epochs = self.nb_epochs()
+        # else:
+        #     raise RuntimeError('nb_epochs needs to be callable or int')
+        norm_const = math.sqrt(1 / (self._batches_per_epoch * self.nb_epochs))
         return self.weight_decay * norm_const
     
     def before_step(self):
@@ -868,7 +948,7 @@ class EarlyStoppingCycle(Callback):
     '''
     # def __init__(self, sched_cb, mm_obj, minimize=True, min_delta=0, patience=1, 
     #              min_cycles=4, model_file_path=None):
-    def __init__(self, sched_cb, get_score=None, minimize=True, min_delta=0, patience=1, 
+    def __init__(self, lr_scheduler='optimizer', get_score=None, minimize=True, min_delta=0, patience=1, 
                  min_cycles=4, model_file_path=None):
         # self.mm_obj = mm_obj
         self.get_score = get_score
@@ -877,7 +957,7 @@ class EarlyStoppingCycle(Callback):
         self.patience = patience
         self.min_cycles = min_cycles
         self.model_file_path = model_file_path
-        self.sched_cb = sched_cb
+        self.lr_scheduler = lr_scheduler
         self.cur_best = np.inf if self.minimize else -np.inf
         self.cur_best_cycle_nb = None
 
@@ -885,9 +965,11 @@ class EarlyStoppingCycle(Callback):
         if self.get_score is None:
             # self.get_score = lambda: self.model.val_metrics.get_scores('loss')[-1]
             self.get_score = lambda: self.model.val_metrics.scores['loss']['score'][-1]
+        if self.lr_scheduler == 'optimizer':
+            self.lr_scheduler = self.model.optimizer.lr_scheduler
         
     def on_epoch_end(self):
-        etas = self.sched_cb.get_etas()
+        etas = self.lr_scheduler.get_etas()
         cycle_nb = etas.count(1.) - 1
         # score = self.mm_obj.scores[0][-1]
         score = self.get_score()

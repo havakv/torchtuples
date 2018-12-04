@@ -5,8 +5,8 @@ from torch.optim import Optimizer
 
 class LRSchedulerBatch(object):
     def __init__(self, optimizer, batch_iter=-1):
-        if not isinstance(optimizer, Optimizer):
-            raise TypeError(f'{type(optimizer).__name__} is not an Optimizer')
+        # if not isinstance(optimizer, Optimizer):
+        #     raise TypeError(f'{type(optimizer).__name__} is not an Optimizer')
         self.optimizer = optimizer
         if batch_iter == -1:
             for group in optimizer.param_groups:
