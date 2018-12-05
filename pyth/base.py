@@ -66,19 +66,14 @@ class Model(object):
         if not hasattr(self, 'make_dataloader_predict'):
             self.make_dataloader_predict = self.make_dataloader
 
-        # self.metrics = {'loss': self.loss}
-        # if metrics is not None:
-        #     if not hasattr(metrics, 'items'):
-        #         raise ValueError(f"Need metrics to be a dictionary or None, got type {type(metrics)}")
-        #     if metrics.get('loss'):
-        #         raise ValueError(f"The 'loss' keyword is reserved for the loss function.")
-        #     self.metrics.update(metrics)
-        # self.train_loss = cb.MonitorTrainLoss()
+        self._init_train_log()
+
+    def _init_train_log(self):
         self.log = cb.TrainingLogger()
-        # self.log.monitors = OrderedDict(train_loss=self.train_loss)
         self.train_metrics = cb._MonitorFitMetricsTrainData()
         self.val_metrics = cb.MonitorFitMetrics()
         self.log.monitors = OrderedDict(train_=self.train_metrics, val_=self.val_metrics)
+        self.callbacks = None
     
     @staticmethod
     def _device_from__init__(device):
@@ -280,6 +275,7 @@ class Model(object):
         self.load_model_weights(path)
         lr = lr_finder.get_best_lr()
         self.optimizer = self.optimizer.reinitialize(lr=lr)
+        self._init_train_log()
         os.remove(path)
 
     def lr_finder(self, input, target, batch_size=256, lr_min=1e-7, lr_max=10, n_steps=100, tolerance=10.,

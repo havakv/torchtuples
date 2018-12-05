@@ -782,10 +782,14 @@ class LRSchedulerBatch(Callback):
     '''
     def __init__(self, scheduler):
         self.scheduler = scheduler
+
+    def on_fit_start(self):
+        self.scheduler.step()  
     
     def on_batch_end(self):
         self.scheduler.step()
         return False
+
 
 class LRCosineAnnealing(LRSchedulerBatch):
     def __init__(self, cycle_len="epoch", cycle_multiplier=2, eta_min=0):
@@ -808,6 +812,7 @@ class LRCosineAnnealing(LRSchedulerBatch):
         elif self.model.optimizer is not self.scheduler.optimizer:
             raise RuntimeError(
                 "Changed optimizer, and we have not implemented cosine annealing for this")
+        super().on_fit_start()
     
     def get_cycle_len(self):
         return self.scheduler.cycle_len
@@ -831,6 +836,7 @@ class LRFinder(Callback):
         self.batch_loss = []
         self.scheduler = lr_scheduler.LRFinderScheduler(self.model.optimizer, self.lr_min,
                                                         self.lr_max, self.n_steps)
+        self.scheduler.step()
     
     def on_batch_end(self):
         self.scheduler.step()
@@ -845,7 +851,8 @@ class LRFinder(Callback):
     
     def to_pandas(self, smoothed=0):
         res = pd.DataFrame(dict(train_loss=self.batch_loss),
-                           index=self.scheduler.lrs[:len(self.batch_loss)])
+                           index=self.lrs[:len(self.batch_loss)])
+        res.index.name = 'lr'
         if smoothed:
             res = res.apply(_smooth_curve, beta=smoothed)
         return res
@@ -860,9 +867,19 @@ class LRFinder(Callback):
         ax.set_xlabel('lr')
         ax.set_ylabel(ylabel)
         return ax
+
+    @property
+    def lrs(self):
+        return self.scheduler.lrs
     
-    def get_best_lr(self):
-        return self.to_pandas(smoothed=0.98)['train_loss'].sort_values().index[0] / 10 / 2
+    def get_best_lr(self, lower=1e-4, upper=1., _multiplier=10):
+        idx_lower = np.searchsorted(self.lrs, lower * _multiplier)
+        idx_upper = np.searchsorted(self.lrs, upper * _multiplier, 'right')
+        smoothed = _smooth_curve(self.batch_loss)[idx_lower:idx_upper]
+        idx_min = np.argmin(smoothed)
+        best_lr = self.lrs[idx_lower:idx_upper][idx_min] / _multiplier
+        return best_lr
+        # return self.to_pandas(smoothed=0.98)['train_loss'].sort_values().index[0] / 10 / 2
 
 def _smooth_curve(vals, beta=0.98):
     """From fastai"""
