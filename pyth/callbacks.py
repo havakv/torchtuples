@@ -3,21 +3,18 @@ Callbacks.
 '''
 import warnings
 import time
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 import math
 import numpy as np
-import pandas as pd
-# import matplotlib.pyplot as plt
-# from sklearn import metrics
+try:
+    import pandas as pd
+except:
+    pass
 import torch
-from torch import optim
-# from torch.autograd import Variable
-# from .utils import to_cuda
-# from .optim import AdamW
-from . import lr_scheduler 
 import pyth
+from . import lr_scheduler 
 
-class SubCallbackHandler:
+class CallbackHandler:
     def __init__(self, callbacks):
         self.callbacks = OrderedDict()
         if type(callbacks) in (list, tuple):
@@ -26,6 +23,7 @@ class SubCallbackHandler:
                 cb_as_dict[self._make_name(cb)] = cb
             callbacks = cb_as_dict
         self.callbacks = OrderedDict(callbacks)
+        self.model = None
 
     def _make_name(self, obj):
         name = obj.__class__.__name__
@@ -39,7 +37,16 @@ class SubCallbackHandler:
         return self.callbacks[name]
     
     def __setitem__(self, name, callback):
-        return self.append(callback, name)
+        self.append(callback, name)
+
+    def append(self, callback, name=None):
+        if self.model is None:
+            raise RuntimeError("Can only call append after the callback has received the model.")
+        callback.give_model(self.model)
+        if name is None:
+            name = self._make_name(callback)
+        assert name not in self.callbacks.keys(), f"Duplicate name: {name}"
+        self.callbacks[name] = callback
     
     def items(self):
         return self.callbacks.items()
@@ -82,16 +89,12 @@ class SubCallbackHandler:
         stop_signal = self.apply_callbacks(lambda x: x.on_epoch_end())
         return stop_signal
 
-class TrainingCallbackHandler(object):
-    '''Object for holding all callbacks.
 
-    Parameters:
-        callbacks_list: List containing callback objects.
+class TrainingCallbackHandler(CallbackHandler):
+    '''Object for holding all callbacks.
     '''
-    # def __init__(self, train_loss, log, callbacks=None):
     def __init__(self, optimizer, train_metrics, log, val_metrics=None, callbacks=None):
         self.callbacks = OrderedDict()
-        # self.callbacks['train_loss'] = train_loss
         self.callbacks['optimizer'] = optimizer
         self.callbacks['train_metrics'] = train_metrics
         if val_metrics:
@@ -109,81 +112,12 @@ class TrainingCallbackHandler(object):
                 assert name not in self.callbacks.keys(), f"Duplicate name: {name}"
                 self.callbacks[name] = cb
 
-        self.callbacks.move_to_end("log")
+        self.callbacks.move_to_end('log')
         self.model = None
-    
-    def _make_name(self, obj):
-        name = obj.__class__.__name__
-        i = 0
-        while name in self.callbacks.keys():
-            name = name + '_' + str(i)
-            i += 1
-        return name
-    
-    def __getitem__(self, name):
-        return self.callbacks[name]
-    
-    def __setitem__(self, name, callback):
-        return self.append(callback, name)
-    
-    def items(self):
-        return self.callbacks.items()
-    
-    def keys(self):
-        return self.callbacks.keys()
-    
-    def values(self):
-        return self.callbacks.values()
-    
-    def __len__(self):
-        return len(self.callbacks)
 
     def append(self, callback, name=None):
-        if self.model is None:
-            raise RuntimeError("Can only call append after the callback has received the model.")
-        callback.give_model(self.model)
-        if name is None:
-            name = self._make_name(callback)
-        assert name not in self.callbacks.keys(), f"Duplicate name: {name}"
-        self.callbacks[name] = callback
-        self.callbacks.move_to_end("log")
-
-    def give_model(self, model):
-        self.model = model
-        for c in self.callbacks.values():
-            c.give_model(model)
-
-    def on_fit_start(self):
-        stop_signal = False
-        for c in self.callbacks.values():
-            stop = c.on_fit_start()
-            stop = stop if stop else False
-            stop_signal += stop
-        return stop_signal
-
-    def before_step(self):
-        stop_signal = False
-        for c in self.callbacks.values():
-            stop = c.before_step()
-            stop = stop if stop else False
-            stop_signal += stop
-        return stop_signal
-
-    def on_batch_end(self):
-        stop_signal = False
-        for c in self.callbacks.values():
-            stop = c.on_batch_end()
-            stop = stop if stop else False
-            stop_signal += stop
-        return stop_signal
-
-    def on_epoch_end(self):
-        stop_signal = False
-        for c in self.callbacks.values():
-            stop = c.on_epoch_end()
-            stop = stop if stop else False
-            stop_signal += stop
-        return stop_signal
+        super().append(callback, name)
+        self.callbacks.move_to_end('log')
 
 
 class Callback(object):
@@ -207,59 +141,59 @@ class Callback(object):
         stop_signal = False
         return stop_signal
 
-class PlotProgress(Callback):
-    '''Plott progress
 
-    Parameters:
-        monitor: Dict with names and Moniro objects.
-        filename: Filename (without ending).
-        type: If 'altair' plot with altair.
-            If not, type is given as fileending to matplotlib.
-    '''
-    def __init__(self, monitor, filename='progress', type='svg',
-                 style='fivethirtyeight'):
-        super().__init__()
-        self.filename = filename
-        self._first = True
-        assert monitor.__class__ in [dict, OrderedDict], 'for now we need dict'
-        self.monitor = monitor
-        self.type = type
-        self.style = style
+# class PlotProgress(Callback):
+#     '''Plott progress
 
-    def on_epoch_end(self):
-        if self._first:
-            self._first = False
-            return False
+#     Parameters:
+#         monitor: Dict with names and Moniro objects.
+#         filename: Filename (without ending).
+#         type: If 'altair' plot with altair.
+#             If not, type is given as fileending to matplotlib.
+#     '''
+#     def __init__(self, monitor, filename='progress', type='svg',
+#                  style='fivethirtyeight'):
+#         super().__init__()
+#         self.filename = filename
+#         self._first = True
+#         assert monitor.__class__ in [dict, OrderedDict], 'for now we need dict'
+#         self.monitor = monitor
+#         self.type = type
+#         self.style = style
 
-        with plt.style.context(self.style):
-            self.to_pandas().plot()
-            plt.savefig(self.filename+'.'+self.type)
-        plt.close('all')
-        return False
+#     def on_epoch_end(self):
+#         if self._first:
+#             self._first = False
+#             return False
 
-
-    def to_pandas(self, naming='prefix'):
-        '''Get data in dataframe.
-
-        Parameters:
-            naming: Put name of metrix as prefix of suffix.
-        '''
-        warnings.warn('Need to updata this one')
-        df = pd.DataFrame()
-        if self.monitor.__class__ in [dict, OrderedDict]:
-            for name, mm in self.monitor.items():
-                d = mm.to_pandas()
-                if naming == 'suffix':
-                    df = df.join(d, how='outer', rsuffix=name)
-                    continue
-                if naming == 'prefix':
-                    d.columns = [name+'_'+c for c in d.columns]
-                df = df.join(d, how='outer')
-        return df
+#         with plt.style.context(self.style):
+#             self.to_pandas().plot()
+#             plt.savefig(self.filename+'.'+self.type)
+#         plt.close('all')
+#         return False
 
 
-class TrainingLogger_old(Callback):
-    '''Holding statistics about training.'''
+#     def to_pandas(self, naming='prefix'):
+#         '''Get data in dataframe.
+
+#         Parameters:
+#             naming: Put name of metrix as prefix of suffix.
+#         '''
+#         warnings.warn('Need to updata this one')
+#         df = pd.DataFrame()
+#         if self.monitor.__class__ in [dict, OrderedDict]:
+#             for name, mm in self.monitor.items():
+#                 d = mm.to_pandas()
+#                 if naming == 'suffix':
+#                     df = df.join(d, how='outer', rsuffix=name)
+#                     continue
+#                 if naming == 'prefix':
+#                     d.columns = [name+'_'+c for c in d.columns]
+#                 df = df.join(d, how='outer')
+#         return df
+
+
+class TrainingLogger(Callback):
     def __init__(self, verbose=1):
         self.epoch = 0
         self.epochs = []
@@ -292,48 +226,12 @@ class TrainingLogger_old(Callback):
         self.epoch += 1
         return False
     
-    def get_measures(self):
-        measures = self.monitors
-        if self.verbose.__class__ in [dict, OrderedDict]:
-            measures = OrderedDict(measures, **self.verbose)
-        string = ''
-        for name, mm in measures.items():
-            string += '\t%s:' % name
-            scores = mm.scores
-            if not hasattr(scores[-1], '__iter__'):
-                scores = [scores]
-            for sc in mm.scores:
-                string += ' %.4f,' % sc[-1]
-        return string[:-1]
-
     def print_on_epoch_end(self):
         new_time = time.time()
         string = 'Epoch: %d,\ttime: %d sec,' % (self.epoch, new_time - self.prev_time)
         print(string + self.get_measures())
         self.prev_time = new_time
 
-    def to_pandas(self, colnames=None):
-        '''Get data in dataframe.
-        '''
-        mon = self.monitors.copy()
-        df = mon.pop('train_loss').to_pandas()
-        df.columns = ['train_loss']
-        if self.verbose.__class__ in [dict, OrderedDict]:
-            mon.update(self.verbose)
-        for name, mm in mon.items():
-            d = mm.to_pandas()
-            d.columns = [name]
-            df = df.join(d)
-        if colnames:
-            if colnames.__class__ is str:
-                colnames = [colnames]
-            df.columns = colnames
-        return df
-    
-    def plot(self, colnames=None, **kwargs):
-        return self.to_pandas(colnames).plot(**kwargs)
-
-class TrainingLogger(TrainingLogger_old):
     def get_measures(self):
         measures = self.monitors
         if self.verbose.__class__ in [dict, OrderedDict]:
@@ -358,6 +256,10 @@ class TrainingLogger(TrainingLogger_old):
         df = pd.concat(dfs, axis=1)
         return df
 
+    def plot(self, colnames=None, **kwargs):
+        return self.to_pandas(colnames).plot(**kwargs)
+
+
 class EarlyStopping(Callback):
     '''Stop training when monitored quantity has stopped improving.
     Takes a Monitor object and runs it as a callback.
@@ -374,6 +276,8 @@ class EarlyStopping(Callback):
             is achieved.
     '''
     def __init__(self, mm_obj, minimize=True, min_delta=0, patience=10, model_file_path=None):
+        if True:
+            raise NotImplementedError
         self.mm_obj = mm_obj
         self.minimize = minimize
         self.min_delta = min_delta
@@ -404,89 +308,6 @@ class EarlyStopping(Callback):
         return stop_signal
 
 
-class MonitorBase_old(Callback):
-    '''Abstract class for monitoring metrics during training progress.
-
-    Need to implement 'get_score_inputs' function to make it work.
-    See MonitorXy for an example.
-
-    Parameters:
-        monitor_funcs: Function, list, or dict of functions giving quiatities that should
-            be monitored.
-            The function takes argumess (df, preds) and should return a score.
-        batch_size: Batch size used for calculating the scores.
-    '''
-    def __init__(self, monitor_funcs, per_epoch=1, per_batch=False):
-        if per_batch:
-            raise NotImplementedError('Not implemented for per_batch.')
-            self.batch = 0
-        if monitor_funcs.__class__ is dict:
-            self.monitor_names = list(monitor_funcs.keys())
-            self.monitor_funcs = monitor_funcs.values()
-        elif monitor_funcs.__class__ == list:
-            self.monitor_names = list(range(len(monitor_funcs)))
-            self.monitor_funcs = monitor_funcs
-        else:
-            self.monitor_names = ['monitor']
-            self.monitor_funcs = [monitor_funcs]
-
-        self.per_epoch = per_epoch
-        # self.batch_size = batch_size
-        self.epoch = 0
-        self.scores = [[] for _ in self.monitor_funcs]
-        self.epochs = []
-
-    def get_score_inputs(self):
-        '''This function should create arguments to the monitor function.
-        Typically it can return a tuple with (y_true, preds), to calculate e.g. auc.
-        '''
-        # raise NotImplementedError('Need to implement this method!')
-        # return [NotImplemented]
-        (None,)
-    
-    def on_epoch_end(self):
-        if self.epoch % self.per_epoch != 0:
-            self.epoch += 1
-            return False
-
-        score_inputs = self.get_score_inputs()
-        for score_list, mon_func in zip(self.scores, self.monitor_funcs):
-            score_list.append(mon_func(*score_inputs))
-
-        self.epochs.append(self.epoch)
-        self.epoch += 1
-        return False
-
-    def to_pandas(self, colnames=None):
-        '''Return scores as a pandas dataframe'''
-        if colnames is not None:
-            if colnames.__class__ is str:
-                colnames = [colnames]
-        else:
-            colnames = self.monitor_names
-        scores = np.array(self.scores).transpose()
-        return (pd.DataFrame(scores, columns=colnames)
-                .assign(epoch=np.array(self.epochs))
-                .set_index('epoch'))
-
-
-class MonitorLoss(MonitorBase_old):
-    def __init__(self, data, per_epoch=1, **kwargs):
-        monitor_funcs = {'loss': self._identity}
-        super().__init__(monitor_funcs, per_epoch)
-        self.data = data
-        assert 'score_func' not in kwargs, 'You cannot give `score_func` to kwargs here.'
-        self.kwargs = kwargs
-        # self.eval_ = eval_
-    
-    def _identity(self, score):
-        return score
-    
-    def get_score_inputs(self):
-        return [self.model.score_in_batches(self.data, **self.kwargs)]
-
-from collections import defaultdict
-
 class MonitorMetrics(Callback):
     def __init__(self):
         self.scores = dict()
@@ -510,10 +331,10 @@ class MonitorMetrics(Callback):
             scores = scores.to_frame()
         return scores
 
+
 class _MonitorFitMetricsTrainData(MonitorMetrics):
     def __init__(self, per_epoch=1):
         super().__init__()
-        # self.scores = defaultdict(lambda: defaultdict(list))
         self.per_epoch = per_epoch
 
     def on_fit_start(self):
@@ -525,64 +346,18 @@ class _MonitorFitMetricsTrainData(MonitorMetrics):
 
     def on_epoch_end(self):
         super().on_epoch_end()
-        # self.epoch += 1
         if self.epoch % self.per_epoch != 0:
             return False
         for name, vals in self.batch_metrics.items():
             self.append_score(name, np.mean(vals))
-            # self.scores[name]['epoch'].append(self.epoch)
-            # self.scores[name][name].append(np.mean(vals))
         return False
 
-class ___MonitorFitMetricsTrainData(Callback):
-    def __init__(self, per_epoch=1):
-        self.scores = defaultdict(lambda: defaultdict(list))
-        self.per_epoch = per_epoch
-        self.epoch = -1
-
-    def on_fit_start(self):
-        self.batch_metrics = defaultdict(list)
-    
-    def on_batch_end(self):
-        for name, score in self.model.batch_metrics.items():
-            self.batch_metrics[name].append(score.item())
-
-    def on_epoch_end(self):
-        self.epoch += 1
-        if self.epoch % self.per_epoch != 0:
-            return False
-        for name, vals in self.batch_metrics.items():
-            self.scores[name]['epoch'].append(self.epoch)
-            self.scores[name][name].append(np.mean(vals))
-        return False
-
-    def to_pandas(self, colnames=None):
-        '''Return scores as a pandas dataframe'''
-        # if colnames is not None:
-        #     if colnames.__class__ is str:
-        #         colnames = [colnames]
-        # else:
-        #     colnames = self.scores.keys()
-        assert colnames is None, "Not implemented"
-        scores = [pd.Series(score[name], index=score['epoch']).rename(name)
-                  for name, score in self.scores.items()]
-        scores = pd.concat(scores, axis=1)
-        if type(scores) is pd.Series:
-            scores = scores.to_frame()
-        return scores
-        # scores = np.array(self.scores).transpose()
-        # return (pd.DataFrame(scores, columns=colnames)
-        #         .assign(epoch=np.array(self.epochs))
-        #         .set_index('epoch'))
 
 class MonitorFitMetrics(MonitorMetrics):
     def __init__(self, dataloader=None, per_epoch=1):
         super().__init__()
         self.dataloader = dataloader
-        # self.scores = defaultdict(lambda: defaultdict(list))
-        # self.scores = dict()
         self.per_epoch = per_epoch
-        # self.epoch = -1
 
     @property
     def dataloader(self):
@@ -594,35 +369,15 @@ class MonitorFitMetrics(MonitorMetrics):
 
     def on_epoch_end(self):
         super().on_epoch_end()
-        # self.epoch += 1
         if self.epoch % self.per_epoch != 0:
             return False
         if self.dataloader is None:
             scores = {name: np.nan for name in self.model.metrics.keys()}
         else:
-            # scores = self.model.score_in_batches(self.data, batch_size=self.batch_size)
             scores = self.model.score_in_batches_dataloader(self.dataloader)
         for name, val in scores.items():
             self.append_score(name, val)
-            # self.scores[name]['epoch'].append(self.epoch)
-            # self.scores[name][name].append(np.mean(vals))
         return False
-
-    # def get_scores(self, name):
-    #     score = self.scores.get(name)
-    #     if score is None:
-    #         return ValueError(f"No score named {name}.")
-    #     return score.get(name)
-
-    # def to_pandas(self, colnames=None):
-    #     '''Return scores as a pandas dataframe'''
-    #     assert colnames is None, "Not implemented"
-    #     scores = [pd.Series(score[name], index=score['epoch']).rename(name)
-    #               for name, score in self.scores.items()]
-    #     scores = pd.concat(scores, axis=1)
-    #     if type(scores) is pd.Series:
-    #         scores = scores.to_frame()
-    #     return scores
 
 
 class MonitorTrainMetrics(Callback):
@@ -631,13 +386,6 @@ class MonitorTrainMetrics(Callback):
     Parameters:
         per_epoch: How often to calculate.
     '''
-    # def __init__(self, per_epoch=1):
-        # monitor_funcs = {'loss': self.get_loss}
-        # super().__init__(monitor_funcs, per_epoch)
-    
-    # def get_loss(self, *args, **kwargs):
-    #     loss = np.mean(self.batch_loss)
-    #     return loss
     @property
     def scores(self):
         return self.model.train_metrics.scores
@@ -650,34 +398,6 @@ class MonitorTrainMetrics(Callback):
         if type(scores) is pd.Series:
             scores = scores.to_frame()
         return scores
-
-# class MonitorTrainLoss(MonitorBase):
-#     '''Monitor metrics for training loss.
-
-#     Parameters:
-#         per_epoch: How often to calculate.
-#     '''
-#     def __init__(self, per_epoch=1):
-#         monitor_funcs = {'loss': self.get_loss}
-#         super().__init__(monitor_funcs, per_epoch)
-    
-#     def get_loss(self, *args, **kwargs):
-#         loss = np.mean(self.batch_loss)
-#         return loss
-
-#     def get_score_inputs(self):
-#         return None, None
-
-#     def on_fit_start(self):
-#         self.batch_loss = []
-
-#     def on_batch_end(self):
-#         self.batch_loss.append(self.model.batch_loss.item())
-
-#     def on_epoch_end(self):
-#         stop_signal = super().on_epoch_end()
-#         self.batch_loss = []
-#         return stop_signal
 
 
 # class MonitorXy(MonitorBase):
@@ -802,8 +522,6 @@ class LRCosineAnnealing(LRSchedulerBatch):
     def on_fit_start(self):
         if self.first_cycle_len == "epoch":
             self.first_cycle_len = self.model.fit_info['batches_per_epoch']
-        # else:
-        #     self.first_cycle_len = self.cycle_len
         if not self.scheduler:
             scheduler = lr_scheduler.LRBatchCosineAnnealing(self.model.optimizer, self.first_cycle_len,
                                                             self.cycle_multiplier, self.eta_min,
@@ -861,7 +579,6 @@ class LRFinder(Callback):
         res = self.to_pandas(smoothed)
         ylabel = 'bach_loss'
         if smoothed:
-            # res = res.apply(_smooth_curve, beta=smoothed)
             ylabel = ylabel + ' (smoothed)'
         ax = res.plot(logx=True, **kwargs)
         ax.set_xlabel('lr')
@@ -872,14 +589,25 @@ class LRFinder(Callback):
     def lrs(self):
         return self.scheduler.lrs
     
-    def get_best_lr(self, lower=1e-4, upper=1., _multiplier=10):
+    def get_best_lr(self, lower=1e-4, upper=1., _multiplier=10.):
+        """Get suggestion for bets learning rate.
+        It is beter to investigate the plot, but this might work too.
+        
+        Keyword Arguments:
+            lower {float} -- Lower accepable learning rate (default: {1e-4})
+            upper {float} -- Upper acceptable learning rate (default: {1.})
+            _multiplier {float} -- See sorce code (default according to fast.ai) (default: {10})
+        
+        Returns:
+            float -- Suggested best learning rate.
+        """
+
         idx_lower = np.searchsorted(self.lrs, lower * _multiplier)
         idx_upper = np.searchsorted(self.lrs, upper * _multiplier, 'right')
         smoothed = _smooth_curve(self.batch_loss)[idx_lower:idx_upper]
         idx_min = np.argmin(smoothed)
         best_lr = self.lrs[idx_lower:idx_upper][idx_min] / _multiplier
         return best_lr
-        # return self.to_pandas(smoothed=0.98)['train_loss'].sort_values().index[0] / 10 / 2
 
 def _smooth_curve(vals, beta=0.98):
     """From fastai"""
@@ -963,11 +691,8 @@ class EarlyStoppingCycle(Callback):
         model_file_path: If spesified, the model weights will be stored whever a better score
             is achieved.
     '''
-    # def __init__(self, sched_cb, mm_obj, minimize=True, min_delta=0, patience=1, 
-    #              min_cycles=4, model_file_path=None):
-    def __init__(self, lr_scheduler='optimizer', get_score=None, minimize=True, min_delta=0, patience=1, 
-                 min_cycles=4, model_file_path=None):
-        # self.mm_obj = mm_obj
+    def __init__(self, lr_scheduler='optimizer', get_score=None, minimize=True, min_delta=0,
+                 patience=1, min_cycles=4, model_file_path=None):
         self.get_score = get_score
         self.minimize = minimize
         self.min_delta = min_delta
@@ -980,7 +705,6 @@ class EarlyStoppingCycle(Callback):
 
     def on_fit_start(self):
         if self.get_score is None:
-            # self.get_score = lambda: self.model.val_metrics.get_scores('loss')[-1]
             self.get_score = lambda: self.model.val_metrics.scores['loss']['score'][-1]
         if self.lr_scheduler == 'optimizer':
             self.lr_scheduler = self.model.optimizer.lr_scheduler
@@ -988,20 +712,16 @@ class EarlyStoppingCycle(Callback):
     def on_epoch_end(self):
         etas = self.lr_scheduler.get_etas()
         cycle_nb = etas.count(1.) - 1
-        # score = self.mm_obj.scores[0][-1]
         score = self.get_score()
 
         if self.minimize:
             if score < (self.cur_best - self.min_delta):
                 self.cur_best = score
                 self.cur_best_cycle_nb = cycle_nb
-                # self.n = -1
         else:
             if score > (self.cur_best + self.min_delta):
                 self.cur_best = score
                 self.cur_best_cycle_nb = cycle_nb
-                # self.n = -1
-        # self.n += 1
 
         if (score == self.cur_best) and (self.model_file_path is not None):
             self.model.save_model_weights(self.model_file_path)
@@ -1009,51 +729,3 @@ class EarlyStoppingCycle(Callback):
         stop_signal = ((cycle_nb > (self.cur_best_cycle_nb + self.patience)) and 
                        (cycle_nb >= self.min_cycles))
         return stop_signal
-
-
-
-# class AdamWR(Callback):
-#     """Implementation of AdamWR as a callback.
-#     It is essentialy an Adam optimizer with 
-#     """
-#     def __init__(self, lr=1e-1, betas=(0.9, 0.99), eps=1e-8, weight_decay=0., normalized=False,
-#                  cycle_len="epoch", cycle_multiplier=2, eta_min=0, keep_etas=True):
-#         self.lr = lr
-#         self.betas = betas
-#         self.eps = eps
-#         self.weight_decay = weight_decay
-#         self.normalized = normalized
-#         self.cycle_len = cycle_len
-#         self.cycle_multiplier = cycle_multiplier
-#         self.eta_min = eta_min
-#         self.keep_etas = keep_etas
-
-#         self.optimizer = None
-#         self.weight_decay_callback = None
-#         self.lr_sched = None
-#         self.cos_anneal = None
-    
-#     def on_fit_start(self):
-#         if self.optimizer is None:
-#             self.optimizer = AdamW(self.model.net.parameters(), self.lr, self.betas, self.eps)
-#             self.model.optimizer = self.optimizer
-        
-#         if self.cos_anneal is None:
-#             self.cos_anneal = BatchCosineAnnealingLR(self.optimizer, self.cycle_len, self.cycle_multiplier,
-#                                                     self.eta_min, keep_etas=self.keep_etas)
-#             self.lr_sched = LRSchedulerBatch(self.cos_anneal)
-
-#         if (self.weight_decay_callback is None) and self.weight_decay:
-#             nb_epochs = lambda: self.cos_anneal.cycle_len
-#             self.weight_decay_callback = WeightDecay(self.weight_decay, self.normalized, nb_epochs)
-#             self.weight_decay_callback.give_model(self.model)
-        
-#         # This is risky!!!!!!!!!!!
-#         self.model.callbacks.append(self.lr_sched)
-#         if self.weight_decay:
-#             self.model.callbacks.append(self.weight_decay_callback)
-
-
-
-
-        

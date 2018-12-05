@@ -1,7 +1,8 @@
 from torch import optim
 import pyth.callbacks as cb
 
-class OptimWrap(cb.SubCallbackHandler):
+# class OptimWrap(cb.SubCallbackHandler):
+class OptimWrap(cb.CallbackHandler):
     def __init__(self, optimizer, callbacks=None):
         self.optimizer = optimizer
         if callbacks is None:
