@@ -52,20 +52,13 @@ class Model(object):
         if type(self.net) is str:
             self.load_net(self.net)
         self.loss = loss
-        # self.optimizer = optimizer if optimizer else AdamW(self.net.parameters())
         self.optimizer = optimizer if optimizer else AdamW
-        # if callable(self.optimizer):
-        #     self.optimizer = self.optimizer(parameters=net.parameters())
-        # if not isinstance(self.optimizer, OptimWrap):
-        #     self.optimizer = OptimWrap(optimizer)
-
         self.device = self._device_from__init__(device)
         self.net.to(self.device)
         # self.net_predict = net_predict if net_predict else self.net
         # self.net_predict.to(self.device)
         if not hasattr(self, 'make_dataloader_predict'):
             self.make_dataloader_predict = self.make_dataloader
-
         self._init_train_log()
 
     def _init_train_log(self):
@@ -133,7 +126,6 @@ class Model(object):
             return {'levels': tuple_.to_levels(), 'shapes': tuple_.shapes().apply(lambda x: x[1:])}
         input, target = next(iter(dataloader))
         self.fit_info['input'] = _tuple_info(input)
-        # self.fit_info['target'] = _tuple_info(target)
     
     def _to_device(self, data):
         """Move data to self.device.
@@ -168,7 +160,18 @@ class Model(object):
         out = tuplefy(out)
         res = {name: metric(*out, *target) for name, metric in metrics.items()}
         return res
-        # return self.loss(*out, *target)
+
+    def _setup_metrics(self, metrics):
+        all_metrics = {'loss': self.loss}
+        if metrics is not None:
+            if not hasattr(metrics, 'items'):
+                if not hasattr(metrics, '__iter__'):
+                    metrics = [metrics]
+                metrics = {met.__name__: met for met in metrics}
+            if 'loss' in metrics:
+                raise ValueError("The 'loss' keyword is reserved for the loss function.")
+            all_metrics.update(metrics)
+        return all_metrics
 
     def fit_dataloader(self, dataloader, epochs=1, callbacks=None, verbose=True, metrics=None,
                        val_dataloader=None):
@@ -186,36 +189,22 @@ class Model(object):
         Returns:
             TrainingLogger -- Training log
         """
-        self.metrics = {'loss': self.loss}
-        if metrics is not None:
-            if not hasattr(metrics, 'items'):
-                new_metrics = OrderedDict()
-                if not hasattr(metrics, '__iter__'):
-                    metrics = [metrics]
-                for met in metrics:
-                    new_metrics[met.__name__] = met
-                metrics = new_metrics
-            if metrics.get('loss'):
-                raise ValueError(f"The 'loss' keyword is reserved for the loss function.")
-            self.metrics.update(metrics)
-        # self.log.monitors = OrderedDict(train_loss=self.train_loss)
+        self._setup_train_info(dataloader)
+        self.metrics = self._setup_metrics(metrics)
+        self.log.verbose = verbose
+        self.val_metrics.dataloader = val_dataloader
         if callbacks is None:
             callbacks = []
-        # callbacks.append(self.optimizer)
-        self._setup_train_info(dataloader)
-        self.log.verbose = verbose
-        # self.callbacks = cb.CallbackHandler(self.train_loss, self.log, callbacks)
-        self.val_metrics.dataloader = val_dataloader
-        self.callbacks = cb.CallbackHandler(self.optimizer, self.train_metrics, self.log,
-                                            self.val_metrics, callbacks)
+        self.callbacks = cb.TrainingCallbackHandler(self.optimizer, self.train_metrics, self.log,
+                                                    self.val_metrics, callbacks)
         self.callbacks.give_model(self)
+
         stop_signal = self.callbacks.on_fit_start()
         if stop_signal:
             raise RuntimeError('Got stop_signal from callback before fit starts')
         for _ in range(epochs):
             for input, target in dataloader:
                 self.optimizer.zero_grad()
-                # self.batch_loss = self.compute_loss(input, target)
                 self.batch_metrics = self.compute_metrics(input, target, self.metrics)
                 self.batch_loss = self.batch_metrics['loss']
                 self.batch_loss.backward()
@@ -298,34 +287,6 @@ class Model(object):
             epochs = n_steps
             self.fit_dataloader(dataloader, epochs, callbacks, verbose)
         return lr_finder
-
-    # def lr_finder(self, input, target, batch_size=256, lr_min=1e-7, lr_max=10, n_steps=100, tolerance=10.,
-    #               callbacks=None, verbose=False, num_workers=0, shuffle=True, **kwargs):
-    #     path = make_name('lr_finder_checkpoint')
-    #     self.save_model_weights(path)
-    #     if callbacks is None:
-    #         callbacks = []
-    #     lr_finder = cb.LRFinder(lr_min, lr_max, n_steps, tolerance)
-    #     callbacks.append(lr_finder)
-    #     epochs = n_steps
-    #     self.optimizer.drop_scheduler()
-    #     self.fit(input, target, batch_size, epochs, callbacks, verbose, num_workers,
-    #              shuffle, **kwargs)
-    #     self.load_model_weights(path)
-    #     lr = lr_finder.get_best_lr()
-    #     self.optimizer.reinitialize(lr=lr)
-    #     os.remove(path)
-    #     return lr_finder
-    
-    # def lr_finder_dataloader(self, dataloader, lr_min=1e-7, lr_max=10, n_steps=100, tolerance=10.,
-    #                          callbacks=None, verbose=False):
-    #     if callbacks is None:
-    #         callbacks = []
-    #     lr_finder = cb.LRFinder(lr_min, lr_max, n_steps, tolerance)
-    #     callbacks.append(lr_finder)
-    #     epochs = n_steps
-    #     self.fit_dataloader(dataloader, epochs, callbacks, verbose)
-    #     return lr_finder
 
     def score_in_batches(self, data, score_func=None, batch_size=8224, eval_=True, mean=True,
                          num_workers=0, shuffle=False, make_dataloader=None, numpy=True, **kwargs):

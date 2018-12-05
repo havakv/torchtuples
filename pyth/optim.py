@@ -1,31 +1,6 @@
 from torch import optim
 import pyth.callbacks as cb
 
-
-# class AdamW(optim.Adam):
-#     """Not a full implementation of AdamW, but just calls reglar Adam
-#     with other defaults:
-#         - beta2 = 0.99.
-#         - weight_decay = 0 (this is L2 regularization and not weight decay).
-#         - amsgra=False.
-    
-#     Use callback WeightDecay to get weight decay.
-    
-#     Arguments:
-#         params {iterable} -- Iterable of parameters to optimize, or dicts
-#             defining parameter groups.
-    
-#     Keyword Arguments:
-#         lr {int} -- Learning rate (default: {1e-3})
-#         betas {tuple} -- Coefficients used for computing running averages
-#             of gradient and its square  (default: {(0.9, 0.99)})
-#         eps {[type]} -- Term added to the denominator to improve
-#             numerical stability (default: {1e-8})
-#     """
-#     def __init__(self, params, lr=1e-3, betas=(0.9, 0.99), eps=1e-8):
-#         super().__init__(params, lr, betas, eps, weight_decay=0, amsgrad=False)
-
-        
 class OptimWrap(cb.SubCallbackHandler):
     def __init__(self, optimizer, callbacks=None):
         self.optimizer = optimizer

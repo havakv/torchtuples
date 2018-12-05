@@ -399,6 +399,11 @@ class TupleLeaf(tuple):
     def to_levels(self):
         return tuple_levels(self)
 
+    @property
+    @docstring(tuple_levels)
+    def levels(self):
+        return tuple_levels(self)
+
     @docstring(cat)
     def cat(self, dim=0):
         return cat(self, dim=0)
@@ -460,6 +465,9 @@ class TupleLeaf(tuple):
     @docstring(stack)
     def stack(self, dim=0):
         return stack(self, dim)
+
+    def repeat(self, times):
+        return self._constructor((self,) * times)
 
     def pipe(self, func, *args, **kwargs):
         """Shorthand for func(self, *args, **kwargs)"""

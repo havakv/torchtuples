@@ -82,7 +82,7 @@ class SubCallbackHandler:
         stop_signal = self.apply_callbacks(lambda x: x.on_epoch_end())
         return stop_signal
 
-class CallbackHandler(object):
+class TrainingCallbackHandler(object):
     '''Object for holding all callbacks.
 
     Parameters:
