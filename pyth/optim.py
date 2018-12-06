@@ -1,7 +1,6 @@
 from torch import optim
 import pyth.callbacks as cb
 
-# class OptimWrap(cb.SubCallbackHandler):
 class OptimWrap(cb.CallbackHandler):
     def __init__(self, optimizer, callbacks=None):
         self.optimizer = optimizer
@@ -31,7 +30,7 @@ class OptimWrap(cb.CallbackHandler):
     def set(self, key, val):
         for param_group in self.optimizer.param_groups:
             param_group[key] = val
-        return self
+        # return self
 
     def set_wd(self, wd):
         """Set weight decay (wd not as in torch.optim)"""
@@ -42,7 +41,7 @@ class OptimWrap(cb.CallbackHandler):
         """Sets 'initial_lr' and 'lr' to value 'lr'"""
         self.set('initial_lr', lr)
         self.set('lr', lr)
-        return self
+        # return self
 
     def set_momentum(self, momentum):
         first_gr = self.optimizer.parameter_groups[0]
@@ -53,7 +52,7 @@ class OptimWrap(cb.CallbackHandler):
             self.set('momentum', momentum)
         else:
             raise ValueError("No momentum found")
-        return self
+        # return self
 
     def set_beta(self, beta):
         first_gr = self.optimizer.parameter_groups[0]
@@ -64,7 +63,7 @@ class OptimWrap(cb.CallbackHandler):
             self.set('alpha', beta)
         else:
             raise ValueError("No beta found")
-        return self
+        # return self
     
     def drop_scheduler(self):
         pass
