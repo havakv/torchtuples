@@ -278,7 +278,7 @@ def to_device(data, device):
         raise RuntimeError(f"Need 'data' to be tensors, not {type(data)}.")
     return data.to(device)
 
-def make_dataloader(data, batch_size, shuffle, num_workers=0, to_tensor=True):
+def make_dataloader(data, batch_size, shuffle, num_workers=0, to_tensor=True, make_dataset=None):
     """Create a dataloder from tensor or np.arrays.
    
     Arguments:
@@ -289,13 +289,18 @@ def make_dataloader(data, batch_size, shuffle, num_workers=0, to_tensor=True):
     Keyword Arguments:
         num_workers {int} -- Number of workers in dataloader (default: {0})
         to_tensor {bool} -- Ensure that we use tensors (default: {True})
+        make_dataset {callable} -- Function for making dataset. If 'None' we use
+            DatasetTuple. (default {None}).
     
     Returns:
         DataLoaderSlice -- A dataloader object like the torch DataLoader
     """
     if to_tensor:
         data = tuplefy(data).to_tensor()
-    dataset = DatasetTuple(data)
+    if make_dataset is None:
+        make_dataset = DatasetTuple
+    # dataset = DatasetTuple(data)
+    dataset = make_dataset(data)
     dataloader = DataLoaderSlice(dataset, batch_size, shuffle=shuffle, num_workers=num_workers)
     return dataloader
 

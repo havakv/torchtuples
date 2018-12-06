@@ -14,6 +14,7 @@ import torch
 import pyth
 from . import lr_scheduler 
 
+
 class CallbackHandler:
     def __init__(self, callbacks):
         self.callbacks = OrderedDict()
@@ -77,6 +78,14 @@ class CallbackHandler:
         stop_signal = self.apply_callbacks(lambda x: x.on_fit_start())
         return stop_signal
 
+    def on_epoch_start(self):
+        stop_signal = self.apply_callbacks(lambda x: x.on_epoch_start())
+        return stop_signal
+
+    def on_batch_start(self):
+        stop_signal = self.apply_callbacks(lambda x: x.on_batch_start())
+        return stop_signal
+
     def before_step(self):
         stop_signal = self.apply_callbacks(lambda x: x.before_step())
         return stop_signal
@@ -87,6 +96,10 @@ class CallbackHandler:
 
     def on_epoch_end(self):
         stop_signal = self.apply_callbacks(lambda x: x.on_epoch_end())
+        return stop_signal
+
+    def on_fit_end(self):
+        stop_signal = self.apply_callbacks(lambda x: x.on_fit_end())
         return stop_signal
 
 
@@ -121,7 +134,7 @@ class TrainingCallbackHandler(CallbackHandler):
 
 
 class Callback(object):
-    '''Abstract class for callbacks.
+    '''Temple for how to write callbacks.
     '''
     def give_model(self, model):
         self.model = model
@@ -129,17 +142,24 @@ class Callback(object):
     def on_fit_start(self):
         pass
 
+    def on_epoch_start(self):
+        pass
+
+    def on_batch_start(self):
+        pass
+
     def before_step(self):
         """Called after loss.backward(), but before optim.step()."""
-        stop_signal = False
-        return stop_signal
+        pass
 
     def on_batch_end(self):
         pass
 
     def on_epoch_end(self):
-        stop_signal = False
-        return stop_signal
+        pass
+
+    def on_fit_end(self):
+        pass
 
 
 # class PlotProgress(Callback):
@@ -337,12 +357,14 @@ class _MonitorFitMetricsTrainData(MonitorMetrics):
         super().__init__()
         self.per_epoch = per_epoch
 
-    def on_fit_start(self):
+    def on_epoch_start(self):
         self.batch_metrics = defaultdict(list)
+        return super().on_epoch_start()
     
     def on_batch_end(self):
         for name, score in self.model.batch_metrics.items():
             self.batch_metrics[name].append(score.item())
+        return super().on_batch_end()
 
     def on_epoch_end(self):
         super().on_epoch_end()

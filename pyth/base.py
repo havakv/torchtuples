@@ -199,26 +199,27 @@ class Model(object):
                                                     self.val_metrics, callbacks)
         self.callbacks.give_model(self)
 
-        stop_signal = self.callbacks.on_fit_start()
-        if stop_signal:
-            raise RuntimeError('Got stop_signal from callback before fit starts')
+        stop = self.callbacks.on_fit_start()
+        # if stop_signal:
+        #     raise RuntimeError('Got stop_signal from callback before fit starts')
         for _ in range(epochs):
+            if stop: break
+            stop = self.callbacks.on_epoch_start()
+            if stop: break
             for input, target in dataloader:
+                stop = self.callbacks.on_batch_start()
+                if stop: break
                 self.optimizer.zero_grad()
                 self.batch_metrics = self.compute_metrics(input, target, self.metrics)
                 self.batch_loss = self.batch_metrics['loss']
                 self.batch_loss.backward()
-                stop_signal += self.callbacks.before_step()
-                if stop_signal:
-                    raise RuntimeError('Stop signal in before_step().')
+                stop = self.callbacks.before_step()
+                if stop: break
                 self.optimizer.step()
-                stop_signal += self.callbacks.on_batch_end()
-                if stop_signal:
-                    break
+                stop = self.callbacks.on_batch_end()
+                if stop: break
             else:
-                stop_signal += self.callbacks.on_epoch_end()
-            if stop_signal:
-                break
+                stop = self.callbacks.on_epoch_end()
         return self.log
 
     def fit(self, input, target, batch_size=256, epochs=1, callbacks=None, verbose=True,
