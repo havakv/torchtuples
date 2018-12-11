@@ -200,8 +200,6 @@ class Model(object):
         self.callbacks.give_model(self)
 
         stop = self.callbacks.on_fit_start()
-        # if stop_signal:
-        #     raise RuntimeError('Got stop_signal from callback before fit starts')
         for _ in range(epochs):
             if stop: break
             stop = self.callbacks.on_epoch_start()
