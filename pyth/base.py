@@ -10,7 +10,7 @@ import torch
 from torch.utils.data import sampler
 import pyth.callbacks as cb
 from pyth.optim import AdamW, OptimWrap
-from pyth.tupleleaf import tuplefy, TupleLeaf, make_dataloader
+from pyth.tupletree import tuplefy, TupleTree, make_dataloader
 
 
 class Model(object):
@@ -100,7 +100,7 @@ class Model(object):
         self.make_dataloader_predict will be set to this method if not implemented
         separatelly.
 
-        This simply calls tupleleaf.make_dataloader, but is included to make
+        This simply calls tupletree.make_dataloader, but is included to make
         inheritance simpler. 
 
         Arguments:
@@ -243,7 +243,7 @@ class Model(object):
         """
         dataloader = self.make_dataloader((input, target), batch_size, shuffle, num_workers, **kwargs)
         val_dataloader = val_data
-        if type(val_data) in (list, tuple, TupleLeaf):
+        if type(val_data) in (list, tuple, TupleTree):
             val_dataloader = self.make_dataloader(val_data, val_batch_size, shuffle=False,
                                                   num_workers=num_workers, **kwargs)
         log = self.fit_dataloader(dataloader, epochs, callbacks, verbose, metrics, val_dataloader)
@@ -316,7 +316,7 @@ class Model(object):
                 make_dataloader = self.make_dataloader
             else:
                 make_dataloader = self.make_dataloader_predict
-        if data.__class__ in (list, tuple, TupleLeaf):
+        if data.__class__ in (list, tuple, TupleTree):
             data = make_dataloader(data, batch_size, shuffle, num_workers, **kwargs)
         scores = self.score_in_batches_dataloader(data, score_func, eval_, mean, numpy)
         return scores
@@ -379,7 +379,7 @@ class Model(object):
             num_workers {int} -- Number of workes in created dataloader (default: {0})
         
         Returns:
-            [TupleLeaf, np.ndarray or tensor] -- Predictions
+            [TupleTree, np.ndarray or tensor] -- Predictions
         """
         dataloader = self.make_dataloader_predict(input, batch_size, shuffle=False, num_workers=num_workers)
         preds = self.predict_dataloader(dataloader, return_numpy, eval_=True, grads=False,
@@ -401,7 +401,7 @@ class Model(object):
                 (default: {False})
         
         Returns:
-            [TupleLeaf, np.ndarray or tensor] -- Predictions
+            [TupleTree, np.ndarray or tensor] -- Predictions
         """
         if hasattr(self, 'fit_info') and (self.make_dataloader is self.make_dataloader_predict):
             input = tuplefy(next(iter(dataloader)))

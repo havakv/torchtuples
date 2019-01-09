@@ -10,8 +10,8 @@ import pyth.base
 import pyth.callbacks
 import pyth.practical
 import pyth.optim
-import pyth.tupleleaf
+import pyth.tupletree
 
 from pyth.base import Model
-from pyth.tupleleaf import TupleLeaf, tuplefy, to_device, numpy_to_tensor, tensor_to_numpy, make_dataloader
-TupleTree = TupleLeaf
+from pyth.tupletree import TupleTree, tuplefy, to_device, numpy_to_tensor, tensor_to_numpy, make_dataloader
+TupleLeaf = TupleTree

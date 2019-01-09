@@ -6,7 +6,7 @@ from pyth.data import DatasetTuple, DataLoaderSlice
 
 
 def apply_leaf(func):
-    """Apply a function to data in TupleLeaf objects (leaf nodes).
+    """Apply a function to data in TupleTree objects (leaf nodes).
 
     E.g.: Two ways to get shapes of all elements in a tuple
 
@@ -26,13 +26,13 @@ def apply_leaf(func):
     @functools.wraps(func)
     def wrapper(data, *args, **kwargs):
         if type(data) in _CONTAINERS:
-            return TupleLeaf(wrapper(sub, *args, **kwargs) for sub in data)
+            return TupleTree(wrapper(sub, *args, **kwargs) for sub in data)
         return func(data, *args, **kwargs)
     return wrapper
 
 def reduce_leaf(func, init_func=None):
-    """Reduce operation on TupleLeaf objects.
-    It reduces the leaf nodes to the first TupleLeaf's topology.
+    """Reduce operation on TupleTree objects.
+    It reduces the leaf nodes to the first TupleTree's topology.
 
     Exs:
     a = ((1, (2, 3), 4),
@@ -46,7 +46,7 @@ def reduce_leaf(func, init_func=None):
     """
     def reduce_rec(acc_val, val, **kwargs):
         if type(acc_val) in _CONTAINERS:
-            return TupleLeaf(reduce_rec(av, v) for av, v in zip(acc_val, val))
+            return TupleTree(reduce_rec(av, v) for av, v in zip(acc_val, val))
         return func(acc_val, val, **kwargs)
 
     @functools.wraps(func)
@@ -73,7 +73,7 @@ def get_if_all_equal(data, default=None):
     """Get value of all are the same, else return default value.
     
     Arguments:
-        data {TupleLeaf} -- TupleLeaf data.
+        data {TupleTree} -- TupleTree data.
     
     Keyword Arguments:
         default {any} -- Return if all are not equal (default: {None})
@@ -155,17 +155,17 @@ def type_of(data):
     return types[0]
 
 def is_flat(data):
-    """Returns true if the TupleLeaf data is flat"""
+    """Returns true if the TupleTree data is flat"""
     if type(data) not in _CONTAINERS:
         return True
     return all(data.apply_nrec(lambda x: type(x) not in _CONTAINERS))
 
 def flatten_tuple(data):
-    """Flatten the TupleLeaf data"""
+    """Flatten the TupleTree data"""
     if type(data) not in _CONTAINERS:
         return data
-    new = TupleLeaf(sub if type(sub) in _CONTAINERS else (sub,) for sub in data)
-    new = TupleLeaf(itertools.chain.from_iterable(new))
+    new = TupleTree(sub if type(sub) in _CONTAINERS else (sub,) for sub in data)
+    new = TupleTree(itertools.chain.from_iterable(new))
     if new.is_flat():
         return new
     return flatten_tuple(new)
@@ -184,7 +184,7 @@ def tuple_levels(data, level=-1):
     """
     if type(data) not in _CONTAINERS:
         return level
-    return TupleLeaf(tuple_levels(sub, level+1) for sub in data)
+    return TupleTree(tuple_levels(sub, level+1) for sub in data)
 
 def cat(seq, dim=0):
     """Conatenate tensors/arrays in tuple.
@@ -220,7 +220,7 @@ def stack(seq, dim=0):
     raise RuntimeError(f"Need type to be np.ndarray or torch.Tensor, fournd {type_}.")
 
 def split(data, split_size, dim=0):
-    """Use torch.split and create multiple TupleLeafs with the splitted tensors."""
+    """Use torch.split and create multiple TupleTree with the splitted tensors."""
     if dim != 0:
         raise NotImplementedError
     if data.type() is not torch.Tensor:
@@ -236,23 +236,23 @@ def unzip_leaf(agg):
     """
     if type(agg) in _CONTAINERS:
         new = agg.apply_nrec(unzip_leaf)
-        return TupleLeaf(zip(*new)).tuplefy()
+        return TupleTree(zip(*new)).tuplefy()
     return agg
 
 def tuplefy(*data, types=(list, tuple), stop_at_tuple=True):
-    """Make TupleLeaf object from *args.
+    """Make TupleTree object from *args.
     
     Keyword Arguments:
-        types {tuple} -- Types that should be transformed to TupleLeaf (default: {(list, tuple)})
-        stop_at_tuple {bool} -- If 'True', the recusion stops at TupleLeaf elements,
-            and if 'False' it will continue through TupleLeaf elements. 
+        types {tuple} -- Types that should be transformed to TupleTree (default: {(list, tuple)})
+        stop_at_tuple {bool} -- If 'True', the recusion stops at TupleTree elements,
+            and if 'False' it will continue through TupleTree elements. 
     
     Returns:
-        TupleLeaf -- A TupleLeaf object
+        TupleTree -- A TupleTree object
     """
     def _tuplefy(data, first=False):
         if (type(data) in types) or first:
-            return TupleLeaf(_tuplefy(sub) for sub in data)
+            return TupleTree(_tuplefy(sub) for sub in data)
         return data
 
     types = list(types)
@@ -260,7 +260,7 @@ def tuplefy(*data, types=(list, tuple), stop_at_tuple=True):
         types.extend(_CONTAINERS)
     if (len(data) == 1) and ((type(data[0]) in types) or (type(data[0]) in _CONTAINERS)):
         data = data[0]
-    data = TupleLeaf(data)
+    data = TupleTree(data)
     return _tuplefy(data, first=True)
 
 @apply_leaf
@@ -268,11 +268,11 @@ def to_device(data, device):
     """Move data to device
     
     Arguments:
-        data {TupleLeaf, tensor} -- Tensors that should be moved to device.
+        data {TupleTree, tensor} -- Tensors that should be moved to device.
         device {str, torch.device} -- Device data is moved to.
     
     Returns:
-        TupleLeaf, tensor -- Data moved to device
+        TupleTree, tensor -- Data moved to device
     """
     if type(data) is not torch.Tensor:
         raise RuntimeError(f"Need 'data' to be tensors, not {type(data)}.")
@@ -324,16 +324,16 @@ def docstring(doc_func):
         return func
     return docstring_real
 
-class TupleLeaf(tuple):
+class TupleTree(tuple):
     """A tuple with some methods that works recursively.
-    This is essentially a tree structure, with all internal nodes being TupleLeaf objects,
+    This is essentially a tree structure, with all internal nodes being TupleTree objects,
     and all leaf nodes contain data.
 
     Hence the apply methods is a map function on the leaf nodes.
     """
     @property
     def _constructor(self):
-        return TupleLeaf
+        return TupleTree
 
     def apply(self, func):
         """Shorthand to apply_leaf(func)(self)"""
@@ -341,13 +341,13 @@ class TupleLeaf(tuple):
 
     def reduce(self, func, init_func=None, **kwargs):
         """Shorthand to reduce_leaf(func, init_func)(self).
-        It reduces the leaf nodes to the first TupleLeaf's topology.
+        It reduces the leaf nodes to the first TupleTree's topology.
 
         Exs:
         a = ((1, (2, 3), 4),
              (1, (2, 3), 4),
              (1, (2, 3), 4),)
-        TupleLeaf(a).reduce(lambda x, y: x+y) 
+        TupleTree(a).reduce(lambda x, y: x+y) 
 
         Gives: (3, (6, 9), 12)
         """
@@ -419,7 +419,7 @@ class TupleLeaf(tuple):
 
     def apply_nrec(self, func):
         """Apply non-recursive, only first list"""
-        return TupleLeaf(func(sub) for sub in self)
+        return TupleTree(func(sub) for sub in self)
     
     def all(self):
         if not self.is_flat():
@@ -461,7 +461,7 @@ class TupleLeaf(tuple):
     @property
     def iloc(self):
         """Used in as pd.DataFrame.iloc for subsetting tensors and arrays"""
-        return _TupleLeafSlicer(self)
+        return _TupleTreeSlicer(self)
 
     @docstring(get_if_all_equal)
     def get_if_all_equal(self, default=None):
@@ -479,7 +479,7 @@ class TupleLeaf(tuple):
         return func(self, *args, **kwargs)
 
 
-class _TupleLeafSlicer:
+class _TupleTreeSlicer:
     def __init__(self, tuple_):
         self.tuple_ = tuple_
 
@@ -487,4 +487,4 @@ class _TupleLeafSlicer:
         return self.tuple_.apply(lambda x: x[index])
 
 # One can append to this to add inherited methods
-_CONTAINERS = [TupleLeaf]
+_CONTAINERS = [TupleTree]
