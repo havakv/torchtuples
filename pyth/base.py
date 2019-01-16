@@ -254,21 +254,23 @@ class Model(object):
     fit_tensor = fit
 
     @contextlib.contextmanager
-    def _lr_finder(self, lr_min, lr_max, n_steps, tolerance, verbose):
+    def _lr_finder(self, lr_min, lr_max, lr_range, n_steps, tolerance, verbose):
+        lr_lower, lr_upper = lr_range
         path = make_name('lr_finder_checkpoint')
         self.save_model_weights(path)
         self.optimizer.drop_scheduler()
-        lr_finder = cb.LRFinder(lr_min, lr_max, n_steps, tolerance)
+        lr_finder = cb.LRFinder(lr_lower, lr_upper, n_steps, tolerance)
         yield lr_finder
         self.load_model_weights(path)
-        lr = lr_finder.get_best_lr()
+        lr = lr_finder.get_best_lr(lr_min, lr_max)
         self.optimizer = self.optimizer.reinitialize(lr=lr)
         self._init_train_log()
         os.remove(path)
 
-    def lr_finder(self, input, target, batch_size=256, lr_min=1e-7, lr_max=10, n_steps=100, tolerance=10.,
-                  callbacks=None, verbose=True, num_workers=0, shuffle=True, **kwargs):
-        with self._lr_finder(lr_min, lr_max, n_steps, tolerance, verbose) as lr_finder:
+    def lr_finder(self, input, target, batch_size=256, lr_min=1e-4, lr_max=1., lr_range=(1e-7, 10.),
+                  n_steps=100, tolerance=10., callbacks=None, verbose=False, num_workers=0,
+                  shuffle=True, **kwargs):
+        with self._lr_finder(lr_min, lr_max, lr_range, n_steps, tolerance, verbose) as lr_finder:
             if callbacks is None:
                 callbacks = []
             callbacks.append(lr_finder)
@@ -277,9 +279,9 @@ class Model(object):
                         shuffle, **kwargs)
         return lr_finder
 
-    def lr_finder_dataloader(self, dataloader, lr_min=1e-7, lr_max=10, n_steps=100, tolerance=10.,
-                             callbacks=None, verbose=True):
-        with self._lr_finder(lr_min, lr_max, n_steps, tolerance, verbose) as lr_finder:
+    def lr_finder_dataloader(self, dataloader, lr_min=1e-4, lr_max=1., lr_range=(1e-7, 10.),
+                             n_steps=100, tolerance=10., callbacks=None, verbose=False):
+        with self._lr_finder(lr_min, lr_max, lr_range, n_steps, tolerance, verbose) as lr_finder:
             if callbacks is None:
                 callbacks = []
             callbacks.append(lr_finder)

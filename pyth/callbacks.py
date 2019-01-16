@@ -565,21 +565,26 @@ class LRCosineAnnealing(LRSchedulerBatch):
 
 
 class LRFinder(Callback):
-    def __init__(self, lr_min=1e-7, lr_max=10., n_steps=100, tolerance=10.):
-        self.lr_min = lr_min
-        self.lr_max = lr_max
+    def __init__(self, lr_lower=1e-7, lr_upper=10., n_steps=100, tolerance=10.):
+        self.lr_lower = lr_lower
+        self.lr_upper = lr_upper
         self.n_steps = n_steps
         self.lowest_loss = np.inf
         self.tolerance = tolerance
 
     def on_fit_start(self):
         self.batch_loss = []
-        self.scheduler = lr_scheduler.LRFinderScheduler(self.model.optimizer, self.lr_min,
-                                                        self.lr_max, self.n_steps)
+        self.scheduler = lr_scheduler.LRFinderScheduler(self.model.optimizer, self.lr_lower,
+                                                        self.lr_upper, self.n_steps)
+        # self.scheduler.step()
+
+    def on_batch_start(self):
         self.scheduler.step()
+        for group in self.model.optimizer.param_groups:
+            group['initial_lr'] = group['lr']  # Needed when using weight decay.
     
     def on_batch_end(self):
-        self.scheduler.step()
+        # self.scheduler.step()
         batch_loss = self.model.batch_loss.item()
         self.batch_loss.append(batch_loss)
         if (batch_loss / self.lowest_loss) > self.tolerance:
@@ -602,7 +607,7 @@ class LRFinder(Callback):
         ylabel = 'bach_loss'
         if smoothed:
             ylabel = ylabel + ' (smoothed)'
-        ax = res.plot(logx=True, **kwargs)
+        ax = res.plot(logx=logx, **kwargs)
         ax.set_xlabel('lr')
         ax.set_ylabel(ylabel)
         return ax
@@ -611,7 +616,7 @@ class LRFinder(Callback):
     def lrs(self):
         return self.scheduler.lrs
     
-    def get_best_lr(self, lower=1e-4, upper=1., _multiplier=10.):
+    def get_best_lr(self, lr_min=1e-4, lr_max=1., _multiplier=10.):
         """Get suggestion for bets learning rate.
         It is beter to investigate the plot, but this might work too.
         
@@ -623,13 +628,18 @@ class LRFinder(Callback):
         Returns:
             float -- Suggested best learning rate.
         """
-
-        idx_lower = np.searchsorted(self.lrs, lower * _multiplier)
-        idx_upper = np.searchsorted(self.lrs, upper * _multiplier, 'right')
-        smoothed = _smooth_curve(self.batch_loss)[idx_lower:idx_upper]
+        smoothed = _smooth_curve(self.batch_loss)
         idx_min = np.argmin(smoothed)
-        best_lr = self.lrs[idx_lower:idx_upper][idx_min] / _multiplier
+        best_lr = self.lrs[idx_min] / _multiplier
+        best_lr = np.clip(best_lr, lr_min, lr_max)
         return best_lr
+
+        # idx_lower = np.searchsorted(self.lrs, lr_min * _multiplier)
+        # idx_upper = np.searchsorted(self.lrs, lr_max * _multiplier, 'right')
+        # smoothed = _smooth_curve(self.batch_loss)[idx_lower:idx_upper]
+        # idx_min = np.argmin(smoothed)
+        # best_lr = self.lrs[idx_lower:idx_upper][idx_min] / _multiplier
+        # return best_lr
 
 def _smooth_curve(vals, beta=0.98):
     """From fastai"""

@@ -47,10 +47,10 @@ class LRSchedulerBatch(object):
 
 
 class LRFinderScheduler(LRSchedulerBatch):
-    def __init__(self, optimizer, lr_min=1e-7, lr_max=10., n_steps=100):
+    def __init__(self, optimizer, lr_lower=1e-7, lr_upper=10., n_steps=100):
         super().__init__(optimizer, batch_iter=-1)
-        ratio = np.power(lr_max/lr_min, 1/(n_steps-1))
-        self.lrs = lr_min * np.power(ratio, np.arange(n_steps))
+        ratio = np.power(lr_upper/lr_lower, 1/(n_steps-1))
+        self.lrs = lr_lower * np.power(ratio, np.arange(n_steps))
     
     def get_lr(self):
         return [self.lrs[self.batch_iter]] * len(self.optimizer.param_groups)
