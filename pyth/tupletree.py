@@ -82,6 +82,16 @@ def get_if_all_equal(data, default=None):
         return data[0]
     return default
 
+def val_if_single(data):
+    """Get value if there is only one element in the tupletree.
+    
+    Arguments:
+        data {TupleTree} -- TupleTree data.
+    """
+    if len(TupleTree(data).flatten()) == 1:
+        return data[0]
+    return data
+
 def zip_leaf(data):
     """Aggregate data to a list of the data.
     This is essentialy a zip opperation that works on the leaf nodes
@@ -477,6 +487,10 @@ class TupleTree(tuple):
     def pipe(self, func, *args, **kwargs):
         """Shorthand for func(self, *args, **kwargs)"""
         return func(self, *args, **kwargs)
+
+    @docstring(val_if_single)
+    def val_if_single(self):
+        return val_if_single(self)
 
 
 class _TupleTreeSlicer:
