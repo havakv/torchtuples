@@ -2,6 +2,8 @@
 """Model for fitting torch models.
 """
 import os
+import time
+import random
 from collections import OrderedDict, defaultdict
 import warnings
 import contextlib
@@ -218,6 +220,7 @@ class Model(object):
                 if stop: break
             else:
                 stop = self.callbacks.on_epoch_end()
+        self.callbacks.on_fit_end()
         return self.log
 
     def fit(self, input, target, batch_size=256, epochs=1, callbacks=None, verbose=True,
@@ -256,7 +259,7 @@ class Model(object):
     @contextlib.contextmanager
     def _lr_finder(self, lr_min, lr_max, lr_range, n_steps, tolerance, verbose):
         lr_lower, lr_upper = lr_range
-        path = make_name('lr_finder_checkpoint')
+        path = make_name_hash('lr_finder_checkpoint')
         self.save_model_weights(path)
         self.optimizer.drop_scheduler()
         lr_finder = cb.LRFinder(lr_lower, lr_upper, n_steps, tolerance)
@@ -481,8 +484,10 @@ class Model(object):
             self.net.to_device(self.device)
         return self.net
 
-def make_name(name, file_ending='.pt', idx=0):
-    path = name + '_' + str(idx) + file_ending
-    if os.path.exists(path):
-        return make_name(name, file_ending, idx+1)
+def make_name_hash(name='', file_ending='.pt'):
+    timestamp = time.ctime().replace(' ', '_')
+    nanoseconds = str(time.time_ns())[-9:]
+    ascii_letters_digits = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    random_hash = ''.join(random.choices(ascii_letters_digits, k=10))
+    path = f"{name}_{timestamp}_{nanoseconds}_{random_hash}{file_ending}"
     return path
