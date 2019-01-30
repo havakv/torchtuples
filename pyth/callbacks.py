@@ -724,13 +724,16 @@ class EarlyStoppingCycle(Callback):
             is achieved.
     '''
     def __init__(self, lr_scheduler='optimizer', get_score=None, minimize=True, min_delta=0,
-                 patience=1, min_cycles=4, model_file_path=None):
+                 patience=1, min_cycles=4, model_file_path=None, load_best=False):
         self.get_score = get_score
         self.minimize = minimize
         self.min_delta = min_delta
         self.patience = patience
         self.min_cycles = min_cycles
         self.model_file_path = model_file_path
+        self.load_best = load_best
+        if self.load_best and (self.model_file_path is None):
+            raise ValueError("To use 'load_best' you need to provide a model_file_path")
         self.lr_scheduler = lr_scheduler
         self.cur_best = np.inf if self.minimize else -np.inf
         self.cur_best_cycle_nb = None
@@ -761,3 +764,8 @@ class EarlyStoppingCycle(Callback):
         stop_signal = ((cycle_nb > (self.cur_best_cycle_nb + self.patience)) and 
                        (cycle_nb >= self.min_cycles))
         return stop_signal
+
+    def on_fit_end(self):
+        if self.load_best:
+            self.model.load_model_weights(self.model_file_path)
+        return super().on_fit_end()
