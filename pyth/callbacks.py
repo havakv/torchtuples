@@ -66,7 +66,8 @@ class CallbackHandler:
         for c in self.values():
             stop = func(c)
             stop = stop if stop else False
-            stop_signal += stop
+            # stop_signal += stop
+            stop_signal = stop_signal or stop
         return stop_signal
 
     def give_model(self, model):
@@ -563,6 +564,12 @@ class LRCosineAnnealing(LRSchedulerBatch):
     def get_etas(self):
         return self.scheduler.etas
 
+    def to_pandas(self):
+        return self.scheduler.to_pandas()
+
+    def plot(self, **kwargs):
+        return self.scheduler.plot(**kwargs)
+
 
 class LRFinder(Callback):
     def __init__(self, lr_lower=1e-7, lr_upper=10., n_steps=100, tolerance=10.):
@@ -769,3 +776,27 @@ class EarlyStoppingCycle(Callback):
         if self.load_best:
             self.model.load_model_weights(self.model_file_path)
         return super().on_fit_end()
+
+
+class StopIfExplodeOrNan(Callback):
+    """Stop trainig if training or validation loss explodes or becomes nan
+
+    Keyword Arguments:
+        multiplier {float} -- Stop if 'loss' >= 'best_loss' * 'multiplier' (default: {10.})
+    """
+    def __init__(self, multiplier=10.):
+        self.multiplier = multiplier
+        self.cur_best = dict(train_=np.inf, val_=np.inf)
+
+    def _update_cur_best(self, key):
+        score = self.model.log.monitors[key].scores['loss']['score'][-1]
+        if np.isnan(score):
+            return True
+        cur_best = self.cur_best[key]
+        if score >= (self.multiplier * cur_best):
+            return True
+        self.cur_best[key] = min(score, cur_best)
+        return False
+
+    def on_epoch_end(self):
+        return self._update_cur_best('train_') or self._update_cur_best('val_')

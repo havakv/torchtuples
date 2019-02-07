@@ -1,6 +1,10 @@
 import math
 import numpy as np
 from torch.optim import Optimizer
+try:
+    import pandas as pd
+except:
+    pass
 
 
 class LRSchedulerBatch(object):
@@ -105,3 +109,11 @@ class LRBatchCosineAnnealing(LRSchedulerBatch):
         if self.cycle_iter == self.cycle_len:
             self.cycle_iter = 0
             self.cycle_len *= self.cycle_multiplier
+
+    def to_pandas(self):
+        etas = pd.Series(self.etas).rename('eta')
+        etas.index.name = 'batch'
+        return etas
+
+    def plot(self, **kwargs):
+        return self.to_pandas().to_frame().plot(**kwargs)
