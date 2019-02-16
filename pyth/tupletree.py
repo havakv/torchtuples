@@ -200,17 +200,15 @@ def cat(seq, dim=0):
     """Conatenate tensors/arrays in tuple.
     Only works for dim=0, meaning we concatenate in the batch dim.
     """
-    if dim != 0:
-        raise NotImplementedError
     if not seq.shapes().apply(lambda x: x[1:]).all_equal():
         raise ValueError("Shapes of merged arrays need to be the same")
 
     type_ = seq.type()
     agg = seq.zip_leaf()
     if type_ is torch.Tensor:
-        return agg.apply(torch.cat)
+        return agg.apply(lambda x: torch.cat(x, dim=dim))
     elif type_ is np.ndarray:
-        return agg.apply(np.concatenate)
+        return agg.apply(lambda x: np.concatenate(x, axis=dim))
     raise RuntimeError(f"Need type to be np.ndarray or torch.Tensor, fournd {type_}.")
 
 def stack(seq, dim=0):
@@ -421,7 +419,7 @@ class TupleTree(tuple):
 
     @docstring(cat)
     def cat(self, dim=0):
-        return cat(self, dim=0)
+        return cat(self, dim)
 
     def reduce_nrec(self, func):
         """Reduct non-recursive, only first list."""
