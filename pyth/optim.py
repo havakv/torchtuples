@@ -126,15 +126,33 @@ class AdamW(OptimizerW):
 
 
 class AdamWR(OptimizerW):
+    """Adam with decoupled weight decay and warm restarts
+    Eta is multiplied with this learning rate.
+    
+    Keyword Arguments:
+        lr {float} -- Learning rate. (default: {1e-3})
+        betas {tuple} -- Betas in Adam. (default: {(0.9, 0.99)})
+        wd {float} -- Decoupled weight decay (default: {0.})
+        wd_normalize {bool} -- Normalized weight decay. (default: {True})
+        cycle_len {int} -- Number of epochs in each cycle. (default: {1})
+        cycle_multiplier {int} -- After each cycle multiply cycle len with this (default: {2})
+        cycle_eta_multiplier {[type]} -- After each cycle multiply eta_max with this (default: {1.})
+        eta_min {int} -- Min eta  (default: {0})
+        params {[type]} -- torch net parameters (default: {None})
+        eps {[type]} --  (default: {1e-8})
+    """
     optim_func = optim.Adam
 
-    def __init__(self, lr=1e-3, betas=(0.9, 0.99), wd=0, wd_normalize=True, 
-                 cycle_len="epoch", cycle_multiplier=2, eta_min=0,
-                 params=None, eps=1e-8):
+    def __init__(self, lr=1e-3, betas=(0.9, 0.99), wd=0., wd_normalize=True, 
+                 cycle_len=1, cycle_multiplier=2, cycle_eta_multiplier=1.,
+                 eta_min=0, params=None, eps=1e-8):
+
         self.init_args = dict(lr=lr, betas=betas, eps=eps, wd=wd, wd_normalize=wd_normalize,
                               cycle_len=cycle_len, cycle_multiplier=cycle_multiplier,
+                              cycle_eta_multiplier=cycle_eta_multiplier,
                               eta_min=eta_min)
-        self.lr_scheduler = cb.LRCosineAnnealing(cycle_len, cycle_multiplier, eta_min)
+        self.lr_scheduler = cb.LRCosineAnnealing(cycle_len, cycle_multiplier,
+                                                 cycle_eta_multiplier,eta_min)
         callbacks = {'lr_scheduler': self.lr_scheduler}
         nb_epochs = self.lr_scheduler.get_cycle_len if wd_normalize else None
         super().__init__(callbacks, wd, wd_normalize, nb_epochs, params)

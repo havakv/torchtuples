@@ -535,19 +535,22 @@ class LRSchedulerBatch(Callback):
 
 
 class LRCosineAnnealing(LRSchedulerBatch):
-    def __init__(self, cycle_len="epoch", cycle_multiplier=2, eta_min=0):
+    def __init__(self, cycle_len=1, cycle_multiplier=2, cycle_eta_multiplier=1., eta_min=0):
         self.first_cycle_len = cycle_len
         self.cycle_multiplier = cycle_multiplier
+        self.cycle_eta_multiplier = cycle_eta_multiplier
         self.eta_min = eta_min
         scheduler = None
         super().__init__(scheduler)
     
     def on_fit_start(self):
-        if self.first_cycle_len == "epoch":
-            self.first_cycle_len = self.model.fit_info['batches_per_epoch']
-        if not self.scheduler:
-            scheduler = lr_scheduler.LRBatchCosineAnnealing(self.model.optimizer, self.first_cycle_len,
-                                                            self.cycle_multiplier, self.eta_min,
+        # if self.first_cycle_len == "epoch":
+        if self.scheduler is None:
+            cycle_len = self.first_cycle_len * self.model.fit_info['batches_per_epoch']
+            scheduler = lr_scheduler.LRBatchCosineAnnealing(self.model.optimizer, int(cycle_len),
+                                                            self.cycle_multiplier,
+                                                            self.cycle_eta_multiplier,
+                                                            self.eta_min,
                                                             keep_etas=True)
             self.scheduler = scheduler
         elif self.model.optimizer is not self.scheduler.optimizer:

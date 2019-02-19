@@ -69,14 +69,20 @@ class LRBatchCosineAnnealing(LRSchedulerBatch):
     Keyword Arguments:
         cycle_len {int} -- Length of cycle (T_i in paper) (default: {1})
         cycle_multiplier {int} -- Multiplier of cycle_len after each finished cycle (default: {2})
+        cycle_eta_multiplier {float} -- Multiply eta with this number after each finished cycle.
+            Reaonalble values should be between 1 and 0. (default: {1.})
         eta_min {int} -- Minimul learing rate muliplier (will not actually be zero) (default: {0})
         last_batch {int} -- Index of last batch (default: {-1})
     """
-    def __init__(self, optimizer, cycle_len=1, cycle_multiplier=2, eta_min=0, batch_iter=-1,
-                 keep_etas=True):
+    def __init__(self, optimizer, cycle_len=1, cycle_multiplier=2, cycle_eta_multiplier=1.,
+                 eta_min=0, batch_iter=-1, keep_etas=True):
         super().__init__(optimizer, batch_iter)
         self.cycle_len = cycle_len
         self.cycle_multiplier = cycle_multiplier
+        if (cycle_eta_multiplier > 1) or (cycle_eta_multiplier < 0):
+            raise ValueError("cycle_eta_multiplier should be in (0, 1].")
+        self.cycle_eta_multiplier = cycle_eta_multiplier
+        self.eta_max = 1.
         self.eta_min = eta_min
         self.keep_etas = keep_etas
         if not keep_etas:
@@ -96,9 +102,10 @@ class LRBatchCosineAnnealing(LRSchedulerBatch):
         self._cycle_len = cycle_len
 
     def get_lr(self):
-        eta = (self.eta_min + 0.5 * (1. - self.eta_min)
+        # eta = (self.eta_min + 0.5 * (1. - self.eta_min)
+        #        * (1 + math.cos(math.pi * self.cycle_iter / self.cycle_len)))
+        eta = (self.eta_min + 0.5 * (self.eta_max - self.eta_min)
                * (1 + math.cos(math.pi * self.cycle_iter / self.cycle_len)))
-            #    * (1 + math.cos(math.pi * (self.batch_iter % self.cycle_len) / self.cycle_len)))
         if self.keep_etas:
             self.etas.append(eta)
         return [eta * group['initial_lr'] for group in self.optimizer.param_groups]
@@ -109,6 +116,7 @@ class LRBatchCosineAnnealing(LRSchedulerBatch):
         if self.cycle_iter == self.cycle_len:
             self.cycle_iter = 0
             self.cycle_len *= self.cycle_multiplier
+            self.eta_max *= self.cycle_eta_multiplier
 
     def to_pandas(self):
         etas = pd.Series(self.etas).rename('eta')
