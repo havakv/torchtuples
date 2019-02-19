@@ -481,7 +481,7 @@ class Model(object):
         """
         self.net = torch.load(path, **kwargs)
         if hasattr(self, 'device'):
-            self.net.to_device(self.device)
+            self.net.to(self.device)
         return self.net
 
 def make_name_hash(name='', file_ending='.pt'):
