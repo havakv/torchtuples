@@ -271,7 +271,7 @@ class Model(object):
         os.remove(path)
 
     def lr_finder(self, input, target, batch_size=256, lr_min=1e-4, lr_max=1., lr_range=(1e-7, 10.),
-                  n_steps=100, tolerance=10., callbacks=None, verbose=False, num_workers=0,
+                  n_steps=100, tolerance=np.inf, callbacks=None, verbose=False, num_workers=0,
                   shuffle=True, **kwargs):
         with self._lr_finder(lr_min, lr_max, lr_range, n_steps, tolerance, verbose) as lr_finder:
             if callbacks is None:
@@ -283,7 +283,7 @@ class Model(object):
         return lr_finder
 
     def lr_finder_dataloader(self, dataloader, lr_min=1e-4, lr_max=1., lr_range=(1e-7, 10.),
-                             n_steps=100, tolerance=10., callbacks=None, verbose=False):
+                             n_steps=100, tolerance=np.inf, callbacks=None, verbose=False):
         with self._lr_finder(lr_min, lr_max, lr_range, n_steps, tolerance, verbose) as lr_finder:
             if callbacks is None:
                 callbacks = []
