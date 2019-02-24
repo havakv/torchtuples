@@ -575,12 +575,12 @@ class LRCosineAnnealing(LRSchedulerBatch):
 
 
 class LRFinder(Callback):
-    def __init__(self, lr_lower=1e-7, lr_upper=10., n_steps=100, tolerance=10.):
+    def __init__(self, lr_lower=1e-7, lr_upper=10., n_steps=100):
         self.lr_lower = lr_lower
         self.lr_upper = lr_upper
         self.n_steps = n_steps
         self.lowest_loss = np.inf
-        self.tolerance = tolerance
+        # self.tolerance = tolerance
 
     def on_fit_start(self):
         self.batch_loss = []
@@ -597,8 +597,8 @@ class LRFinder(Callback):
         # self.scheduler.step()
         batch_loss = self.model.batch_loss.item()
         self.batch_loss.append(batch_loss)
-        if (batch_loss / self.lowest_loss) > self.tolerance:
-            return True
+        # if (batch_loss / self.lowest_loss) > self.tolerance:
+        #     return True
         self.lowest_loss = min(self.lowest_loss, batch_loss)
         if self.scheduler.batch_iter == self.n_steps:
             return True
