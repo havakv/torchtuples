@@ -727,7 +727,8 @@ class EarlyStoppingCycle(Callback):
     Parameters:
         mm_obj: Monitor object, where first metric is used for early stopping.
             E.g. MonitorSurvival(df_val, 'cindex').
-        get_score: Function for obtaining current scores. If None, we use validation loss.
+        get_score: Function for obtaining current scores. If string, we use validation metric.
+            Default is 'loss' which gives validation loss.
         minimize: If we are to minimize or maximize monitor.
         min_delta: Minimum change in the monitored quantity to qualify as an improvement,
             i.e. an absolute change of less than min_delta, will count as no improvement.
@@ -735,9 +736,10 @@ class EarlyStoppingCycle(Callback):
         model_file_path: If spesified, the model weights will be stored whever a better score
             is achieved.
     '''
-    def __init__(self, lr_scheduler='optimizer', get_score=None, minimize=True, min_delta=0,
+    def __init__(self, lr_scheduler='optimizer', get_score='loss', minimize=True, min_delta=0,
                  patience=1, min_cycles=4, model_file_path=None, load_best=False):
         self.get_score = get_score
+        self._get_score = self.get_score
         self.minimize = minimize
         self.min_delta = min_delta
         self.patience = patience
@@ -751,8 +753,8 @@ class EarlyStoppingCycle(Callback):
         self.cur_best_cycle_nb = None
 
     def on_fit_start(self):
-        if self.get_score is None:
-            self.get_score = lambda: self.model.val_metrics.scores['loss']['score'][-1]
+        if type(self.get_score) is str:
+            self.get_score = lambda: self.model.val_metrics.scores[self._get_score]['score'][-1]
         if self.lr_scheduler == 'optimizer':
             self.lr_scheduler = self.model.optimizer.lr_scheduler
         
