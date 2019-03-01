@@ -760,7 +760,8 @@ class EarlyStoppingCycle(Callback):
         
     def on_epoch_end(self):
         etas = self.lr_scheduler.get_etas()
-        cycle_nb = etas.count(1.) - 1
+        # cycle_nb = etas.count(1.) - 1
+        cycle_nb = (np.diff(etas) > 0).sum()
         score = self.get_score()
 
         if self.minimize:
