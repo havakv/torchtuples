@@ -367,7 +367,7 @@ class Model(object):
             return np.mean(batch_scores)
         return batch_scores
 
-    def predict(self, input, batch_size=8224, numpy=True, eval_=True,
+    def predict(self, input, batch_size=8224, numpy=None, eval_=True,
                 grads=False, to_cpu=False, num_workers=0):
         """Get predictions from 'input'.
         
@@ -376,7 +376,8 @@ class Model(object):
         
         Keyword Arguments:
             batch_size {int} -- Batch size (default: {8224})
-            numpy {bool} -- If 'False', tensor is returned (default: {True})
+            numpy {bool} -- 'False' gives tensor, 'True' gives numpy, and None give same as input
+                (default: {None})
             eval_ {bool} -- If 'True', use 'eval' modede on net. (default: {True})
             grads {bool} -- If gradients should be computed (default: {False})
             to_cpu {bool} -- For larger data sets we need to move the results to cpu
@@ -386,13 +387,14 @@ class Model(object):
         Returns:
             [TupleTree, np.ndarray or tensor] -- Predictions
         """
-        dataloader = self.make_dataloader_predict(input, batch_size, shuffle=False, num_workers=num_workers)
-        preds = self.predict_dataloader(dataloader, numpy, eval_=True, grads=False,
-                                        to_cpu=False)
+        if numpy is None:
+            numpy = tuplefy(input).type() is not torch.Tensor
+        dataloader = self.make_dataloader_predict(input, batch_size, shuffle=False,
+                                                  num_workers=num_workers)
+        preds = self.predict_dataloader(dataloader, numpy, eval_, grads, to_cpu)
         return preds
 
-    def predict_dataloader(self, dataloader, numpy=True, eval_=True,
-                           grads=False, to_cpu=False):
+    def predict_dataloader(self, dataloader, numpy=True, eval_=True, grads=False, to_cpu=False):
         """Get predictions from dataloader.
         
         Arguments:

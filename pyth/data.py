@@ -4,6 +4,7 @@ Now works with with batches (slicing rather than loop over indexes),
 and can potentially stop workers from shutting down at each batch.
 '''
 # import random
+import warnings
 import torch
 from torch.utils.data.dataloader import DataLoader, RandomSampler 
 from torch.utils.data import Dataset
@@ -245,6 +246,8 @@ class DatasetTuple(Dataset):
     """
     def __init__(self, *data):
         self.data = pyth.tuplefy(*data)
+        if not self.data.apply(lambda x: type(x) is torch.Tensor).flatten().all():
+            warnings.warn("All data is not torch.Tensor. Consider fixing this.")
 
     def __getitem__(self, index):
         if not hasattr(index, '__iter__'):
