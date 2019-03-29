@@ -490,6 +490,37 @@ class TupleTree(tuple):
     def val_if_single(self):
         return val_if_single(self)
 
+    def numerate(self):
+        """Repalce leaf nodes with numbers from 0 to num. leaf nodes.
+        Gives call order of apply function.
+        
+        Returns:
+            TupleTree -- Numerated leaf nodes.
+        """
+        counter = itertools.count()
+        return self.apply(lambda x: next(counter))
+
+    def reorder(self, order):
+        """Reorder tree according to order.
+        
+        Arguments:
+            order {TupleTree, tuple, list} -- Enumerated structure used for reordering.
+        
+        Returns:
+            TupleTree -- Same data reordered according to order.
+        
+        Example:
+            a = tuplefy(list('abcd'), list('ef'))  # (('a', 'b', 'c', 'd'), ('e', 'f'))
+            order = (0, (1, 2,), 3, (4, 5))
+            a.reorder(order)  # ('a', ('b', 'c'), 'd', ('e', 'f'))
+        """
+        order = tuplefy(order)
+        flat_order = order.flatten()
+        if sorted(flat_order) != list(range(len(flat_order))):
+            raise ValueError("Need order to have numbers from 0, to num leaf node. E.g use 'numerate'")
+        flat = self.flatten()
+        return order.apply(lambda i: flat[i])
+
 
 class _TupleTreeSlicer:
     def __init__(self, tuple_):
