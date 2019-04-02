@@ -355,7 +355,7 @@ class TupleTree(tuple):
         a = ((1, (2, 3), 4),
              (1, (2, 3), 4),
              (1, (2, 3), 4),)
-        TupleTree(a).reduce(lambda x, y: x+y) 
+        tuplefy(a).reduce(lambda x, y: x+y) 
 
         Gives: (3, (6, 9), 12)
         """
@@ -491,7 +491,7 @@ class TupleTree(tuple):
         return val_if_single(self)
 
     def numerate(self):
-        """Repalce leaf nodes with numbers from 0 to num. leaf nodes.
+        """Replace leaf nodes with numbers from 0 to num. leaf nodes.
         Gives call order of apply function.
         
         Returns:
@@ -518,6 +518,22 @@ class TupleTree(tuple):
         flat_order = order.flatten()
         flat = self.flatten()
         return order.apply(lambda i: flat[i])
+
+    def add_root(self):
+        """Add a root node. Equivalent as 'TupleTree((self,))'."""
+        return TupleTree((self,))
+
+    def enumerate(self):
+        """Creates list with numerated first element, and second element is previous data.
+
+        Example:
+            a = tuplefy(list('abcd'), list('ef'))  # (('a', 'b', 'c', 'd'), ('e', 'f'))
+            a.enumerate()   # (([0, 'a'], [1, 'b'], [2, 'c'], [3, 'd']), ([4, 'e'], [5, 'f']))
+        
+        """
+        counter = itertools.count()
+        return self.apply(lambda x: [next(counter), x])
+
 
 
 class _TupleTreeSlicer:
