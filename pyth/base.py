@@ -13,6 +13,7 @@ from torch.utils.data import sampler
 import pyth.callbacks as cb
 from pyth.optim import AdamW, OptimWrap
 from pyth.tupletree import tuplefy, TupleTree, make_dataloader
+from pyth.utils import make_name_hash
 
 
 class Model(object):
@@ -485,11 +486,3 @@ class Model(object):
         if hasattr(self, 'device'):
             self.net.to(self.device)
         return self.net
-
-def make_name_hash(name='', file_ending='.pt'):
-    timestamp = time.ctime().replace(' ', '_')
-    nanoseconds = str(time.time_ns())[-9:]
-    ascii_letters_digits = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-    random_hash = ''.join(random.choices(ascii_letters_digits, k=10))
-    path = f"{name}_{timestamp}_{nanoseconds}_{random_hash}{file_ending}"
-    return path

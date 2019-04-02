@@ -4,6 +4,7 @@ Callbacks.
 import warnings
 import time
 from collections import OrderedDict, defaultdict
+from pathlib import Path
 import math
 import numpy as np
 try:
@@ -13,6 +14,7 @@ except:
 import torch
 import pyth
 from . import lr_scheduler 
+from pyth.utils import make_name_hash
 
 
 class CallbackHandler:
@@ -281,52 +283,52 @@ class TrainingLogger(Callback):
         return self.to_pandas(colnames).plot(**kwargs)
 
 
-class EarlyStopping(Callback):
-    '''Stop training when monitored quantity has stopped improving.
-    Takes a Monitor object and runs it as a callback.
-    Use first metric in mm_obj to determine early stopping.
+# class EarlyStopping(Callback):
+#     '''Stop training when monitored quantity has stopped improving.
+#     Takes a Monitor object and runs it as a callback.
+#     Use first metric in mm_obj to determine early stopping.
 
-    Parameters:
-        mm_obj: Monitor object, where first metric is used for early stopping.
-            E.g. MonitorSurvival(df_val, 'cindex').
-        minimize: If we are to minimize or maximize monitor.
-        min_delta: Minimum change in the monitored quantity to qualify as an improvement,
-            i.e. an absolute change of less than min_delta, will count as no improvement.
-        patience: Number of epochs with no improvement after which training will be stopped.
-        model_file_path: If spesified, the model weights will be stored whever a better score
-            is achieved.
-    '''
-    def __init__(self, mm_obj, minimize=True, min_delta=0, patience=10, model_file_path=None):
-        if True:
-            raise NotImplementedError
-        self.mm_obj = mm_obj
-        self.minimize = minimize
-        self.min_delta = min_delta
-        self.patience = patience
-        self.model_file_path = model_file_path
-        self.cur_best = np.inf if self.minimize else -np.inf
-        self.scores = []
-        self.n = 0
+#     Parameters:
+#         mm_obj: Monitor object, where first metric is used for early stopping.
+#             E.g. MonitorSurvival(df_val, 'cindex').
+#         minimize: If we are to minimize or maximize monitor.
+#         min_delta: Minimum change in the monitored quantity to qualify as an improvement,
+#             i.e. an absolute change of less than min_delta, will count as no improvement.
+#         patience: Number of epochs with no improvement after which training will be stopped.
+#         model_file_path: If spesified, the model weights will be stored whever a better score
+#             is achieved.
+#     '''
+#     def __init__(self, mm_obj, minimize=True, min_delta=0, patience=10, model_file_path=None):
+#         if True:
+#             raise NotImplementedError
+#         self.mm_obj = mm_obj
+#         self.minimize = minimize
+#         self.min_delta = min_delta
+#         self.patience = patience
+#         self.model_file_path = model_file_path
+#         self.cur_best = np.inf if self.minimize else -np.inf
+#         self.scores = []
+#         self.n = 0
 
-    def on_epoch_end(self):
-        score = self.mm_obj.scores[0][-1]
-        self.scores.append(score)
+#     def on_epoch_end(self):
+#         score = self.mm_obj.scores[0][-1]
+#         self.scores.append(score)
 
-        if self.minimize:
-            if score < (self.cur_best - self.min_delta):
-                self.cur_best = score
-                self.n = -1
-        else:
-            if score > (self.cur_best + self.min_delta):
-                self.cur_best = score
-                self.n = -1
-        self.n += 1
+#         if self.minimize:
+#             if score < (self.cur_best - self.min_delta):
+#                 self.cur_best = score
+#                 self.n = -1
+#         else:
+#             if score > (self.cur_best + self.min_delta):
+#                 self.cur_best = score
+#                 self.n = -1
+#         self.n += 1
 
-        if (self.n == 0) and (self.model_file_path is not None):
-            self.model.save_model_weights(self.model_file_path)
+#         if (self.n == 0) and (self.model_file_path is not None):
+#             self.model.save_model_weights(self.model_file_path)
 
-        stop_signal = True if self.n >= self.patience else False
-        return stop_signal
+#         stop_signal = True if self.n >= self.patience else False
+#         return stop_signal
 
 
 class MonitorMetrics(Callback):
@@ -720,7 +722,10 @@ class WeightDecay(Callback):
 
 
 class EarlyStoppingCycle(Callback):
-    '''Stop training when monitored quantity has not improved the last cycle.
+    '''
+    TODO: Should rewrite with _ActionOnBestMetric.
+
+    Stop training when monitored quantity has not improved the last cycle.
     Takes a Monitor object that is also a callback.
     Use first metric in mm_obj to determine early stopping.
 
@@ -808,3 +813,86 @@ class StopIfExplodeOrNan(Callback):
 
     def on_epoch_end(self):
         return self._update_cur_best('train_') or self._update_cur_best('val_')
+
+
+class _ActionOnBestMetric(Callback):
+    def __init__(self, metric='loss', dataset='val', get_score=None, minimize=True, min_delta=0.,
+                 checkpoint_model=True, file_path=None, load_best=True, rm_file=True):
+        self.metric = metric
+        self.dataset = dataset
+        self.get_score = get_score
+        self.minimize = minimize
+        self.min_delta = min_delta
+        self._checkpoint_model = checkpoint_model
+        if not self._checkpoint_model:
+            assert load_best == False, "Need load best to be False when '_checkpoint_model' is False"
+        if (not load_best and rm_file) and self._checkpoint_model:
+            raise ValueError("If you really want not not load best but remove file you can instead remove this callback.")
+        self.load_best = load_best
+        self.rm_file = rm_file
+        self.file_path = file_path if file_path else make_name_hash('weight_checkpoint')
+        self.cur_best = np.inf if self.minimize else -np.inf
+        self._iter_since_best = 0
+
+    def on_fit_start(self):
+        if self.get_score is None:
+            if self.dataset == 'val':
+                metrics = self.model.val_metrics
+            elif self.dataset == 'train':
+                metrics = self.model.train_metrics
+            else:
+                raise ValueError("Need dataset to be 'val' or 'train'.")
+            self.get_score = lambda: metrics.scores[self.metric]['score'][-1]
+
+    def on_epoch_end(self):
+        score = self.get_score()
+        if self.minimize:
+            if score < (self.cur_best - self.min_delta):
+                self.cur_best = score
+                self._iter_since_best = -1
+        else:
+            if score > (self.cur_best + self.min_delta):
+                self.cur_best = score
+                self._iter_since_best = -1
+        
+        if (score == self.cur_best) and (self._checkpoint_model):
+            self.model.save_model_weights(self.file_path)
+        self._iter_since_best += 1
+
+    def on_fit_end(self):
+        if self._checkpoint_model:
+            if self.load_best:
+                self.load_weights()
+            if self.rm_file:
+                self.rm_weight_file()
+
+    def load_weights(self):
+        if not self._checkpoint_model:
+            raise RuntimeError("This model has no stored weights")
+        self.model.load_model_weights(self.file_path)
+
+    def rm_weight_file(self):
+        path = Path(self.file_path)
+        if path.exists():
+            path.unlink()
+
+
+class BestWeights(_ActionOnBestMetric):
+    def __init__(self, metric='loss', dataset='val', get_score=None, minimize=True, file_path=None,
+                 load_best=True, rm_file=True):
+        min_delta = 0.
+        checkpoint_model = True
+        super().__init__(metric, dataset, get_score, minimize, min_delta, checkpoint_model,
+                         file_path, load_best, rm_file)
+
+
+class EarlyStopping(_ActionOnBestMetric):
+    def __init__(self, metric='loss', dataset='val', get_score=None, minimize=True, min_delta=0.,
+                 patience=10, checkpoint_model=True, file_path=None, load_best=True, rm_file=True):
+        self.patience = patience
+        super().__init__(metric, dataset, get_score, minimize, min_delta, checkpoint_model,
+                         file_path, load_best, rm_file)
+
+    def on_epoch_end(self):
+        super().on_epoch_end()
+        return self._iter_since_best >= self.patience
