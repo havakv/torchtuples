@@ -1,5 +1,5 @@
 from torch import optim
-import pyth.callbacks as cb
+import torchtuples.callbacks as cb
 
 class OptimWrap(cb.CallbackHandler):
     """Wraps a torch.optim.Optimizer object so we can call some extra methods on it.

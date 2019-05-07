@@ -23,8 +23,8 @@ from torch.utils.data import Dataset
 # else:
 #     import queue
 
-import pyth
-from pyth._pytorch_dataloader import _DataLoaderIterSlice
+import torchtuples
+from torchtuples._pytorch_dataloader import _DataLoaderIterSlice
 
 # def _worker_loop(dataset, index_queue, data_queue, collate_fn, seed, init_fn, worker_id):
 #     global _use_shared_memory
@@ -245,7 +245,7 @@ class DatasetTuple(Dataset):
             (list of y tensors)
     """
     def __init__(self, *data):
-        self.data = pyth.tuplefy(*data)
+        self.data = torchtuples.tuplefy(*data)
         if not self.data.apply(lambda x: type(x) is torch.Tensor).flatten().all():
             warnings.warn("All data is not torch.Tensor. Consider fixing this.")
 

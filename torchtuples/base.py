@@ -10,10 +10,10 @@ import contextlib
 import numpy as np  # shoul be remved
 import torch
 from torch.utils.data import sampler
-import pyth.callbacks as cb
-from pyth.optim import AdamW, OptimWrap
-from pyth.tupletree import tuplefy, TupleTree, make_dataloader
-from pyth.utils import make_name_hash
+import torchtuples.callbacks as cb
+from torchtuples.optim import AdamW, OptimWrap
+from torchtuples.tupletree import tuplefy, TupleTree, make_dataloader
+from torchtuples.utils import make_name_hash
 
 
 class Model(object):
@@ -25,8 +25,8 @@ class Model(object):
     Keyword Arguments:
         loss {function} -- Set function that is used for training 
             (e.g. binary_cross_entropy for torch) (default: {None})
-        optimizer {Optimizer} -- A torch optimizer or similar. Preferrably use pyth.optim instead of
-            torch.optim, as this allows for reinitialization, etc. If 'None' set to pyth.optim.AdamW.
+        optimizer {Optimizer} -- A torch optimizer or similar. Preferrably use torchtuples.optim instead of
+            torch.optim, as this allows for reinitialization, etc. If 'None' set to torchtuples.optim.AdamW.
             (default: {None})
         device {str, int, torch.device} -- Device to compute on. (default: {None})
             Preferrably pass a torch.device object.
@@ -36,7 +36,7 @@ class Model(object):
 
     Example simple model:
     ---------------------
-    from pyth import Model
+    from torchtuples import Model
     import torch
     from torch import nn
     from torch.nn import functional as F

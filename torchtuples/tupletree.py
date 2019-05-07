@@ -2,7 +2,7 @@ import functools
 import itertools
 import numpy as np
 import torch
-from pyth.data import DatasetTuple, DataLoaderSlice
+from torchtuples.data import DatasetTuple, DataLoaderSlice
 
 
 def apply_leaf(func):
@@ -314,7 +314,7 @@ def make_dataloader(data, batch_size, shuffle, num_workers=0, to_tensor=True, ma
 
 
 ## Some tests that should be written
-# a = pyth.Tuple((1, (2, (3, 4))))
+# a = torchtuples.Tuple((1, (2, (3, 4))))
 
 # assert a == a.tuplefy()
 # assert a == tuplefy(a)

@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from pyth import tuplefy
+from torchtuples import tuplefy
 
 def init_embedding(emb):
     """Weight initialization of embeddings (in place).

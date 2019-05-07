@@ -12,9 +12,9 @@ try:
 except:
     pass
 import torch
-import pyth
+import torchtuples
 from . import lr_scheduler 
-from pyth.utils import make_name_hash
+from torchtuples.utils import make_name_hash
 
 
 class CallbackHandler:
