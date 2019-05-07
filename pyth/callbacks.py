@@ -665,7 +665,7 @@ def _smooth_curve(vals, beta=0.98):
     return smoothed
 
 
-class WeightDecay(Callback):
+class DecoupledWeightDecay(Callback):
     """Same weight decay for all groups in the optimizer."""
     def __init__(self, weight_decay, normalized=False, nb_epochs=None):
         self.weight_decay = weight_decay

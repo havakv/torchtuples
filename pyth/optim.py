@@ -2,6 +2,9 @@ from torch import optim
 import pyth.callbacks as cb
 
 class OptimWrap(cb.CallbackHandler):
+    """Wraps a torch.optim.Optimizer object so we can call some extra methods on it.
+    The torch.optim.Optimizer can be obtained through the property 'optimizer'. 
+    """
     def __init__(self, optimizer, callbacks=None):
         self.optimizer = optimizer
         if callbacks is None:
@@ -32,10 +35,9 @@ class OptimWrap(cb.CallbackHandler):
             param_group[key] = val
         # return self
 
-    def set_wd(self, wd):
-        """Set weight decay (wd not as in torch.optim)"""
-        # self.wd = wd
-        return self.set('wd', wd)
+    def set_decoupled_weight_decay(self, wd):
+        """Set decoupled weight decay"""
+        return self.set('decoupled_weight_decay', wd)
 
     def set_lr(self, lr):
         """Sets 'initial_lr' and 'lr' to value 'lr'"""
@@ -72,20 +74,12 @@ class OptimWrap(cb.CallbackHandler):
         print('Optimizer is not reinitialized. Need to do this manually')
         return NotImplemented
 
-
-class OptimizerW(OptimWrap):
+class OptimWrapReinit(OptimWrap):
     optim_func = NotImplemented
     init_args = NotImplemented
 
-    def __init__(self, callbacks=None, wd=0, wd_normalize=False,
-                 nb_epochs=None, params=None):
-        callbacks = callbacks if callbacks else {}
-        if 'weight_decay' in callbacks.keys():
-            raise ValueError("weight_decay allreday exists")
-        self.weight_decay = cb.WeightDecay(wd, wd_normalize, nb_epochs)
-        callbacks['weight_decay'] = self.weight_decay
+    def __init__(self, callbacks=None, params=None):
         super().__init__(None, callbacks)
-        # self.optimizer = None
         if params is not None:
             self.init_optimizer(params)
 
@@ -97,7 +91,6 @@ class OptimizerW(OptimWrap):
         call_args = set(self.optim_func.__init__.__code__.co_varnames[1:])
         init_args = {name: self.init_args[name] for name in (call_args & self.init_args.keys())}
         self.optimizer = self.optim_func(params, **init_args)
-        self.set_wd(self.init_args['wd'])
 
     def reinitialize(self, params=None, **kwargs):
         if params is None:
@@ -112,20 +105,110 @@ class OptimizerW(OptimWrap):
         raise NotImplementedError
 
 
-class AdamW(OptimizerW):
+class Adam(OptimWrapReinit):
+    r"""Wrapper to torch.optim.Adam where params are not needed.
+    Implements Adam algorithm.
+
+    It has been proposed in `Adam: A Method for Stochastic Optimization`_.
+
+    Arguments:
+        lr (float, optional): learning rate (default: 1e-3)
+        betas (Tuple[float, float], optional): coefficients used for computing
+            running averages of gradient and its square (default: (0.9, 0.999))
+        eps (float, optional): term added to the denominator to improve
+            numerical stability (default: 1e-8)
+        weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
+        amsgrad (boolean, optional): whether to use the AMSGrad variant of this
+            algorithm from the paper `On the Convergence of Adam and Beyond`_
+            (default: False)
+        params (iterable): iterable of parameters to optimize or dicts defining
+            parameter groups. If not specified, it will get parameters from model.
+
+    .. _Adam\: A Method for Stochastic Optimization:
+        https://arxiv.org/abs/1412.6980
+    .. _On the Convergence of Adam and Beyond:
+        https://openreview.net/forum?id=ryQu7f-RZ
+    """
     optim_func = optim.Adam
-    def __init__(self, lr=1e-3, betas=(0.9, 0.99), wd=0, wd_normalize=False,
+    def __init__(self, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, amsgrad=False,
+                 params=None):
+        self.init_args = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=amsgrad)
+        super().__init__(None, params)
+
+    @property
+    def _constructor(self):
+        return Adam
+
+
+class OptimizerDecoupledWeightDecay(OptimWrapReinit):
+    def __init__(self, decoupled_weight_decay=0, dwd_normalize=False,
+                 nb_epochs=None, params=None, callbacks=None):
+        callbacks = callbacks if callbacks else {}
+        if 'decoupled_weight_decay' in callbacks.keys():
+            raise ValueError("decoupled_weight_decay allreday exists")
+        self.decoupled_weight_decay = cb.DecoupledWeightDecay(decoupled_weight_decay, dwd_normalize,
+                                                              nb_epochs)
+        callbacks['decoupled_weight_decay'] = self.decoupled_weight_decay
+        super().__init__(callbacks, params)
+
+    def init_optimizer(self, params):
+        return super().init_optimizer(params)
+        self.set_decoupled_weight_decay(self.init_args['decoupled_weight_decay'])
+
+# class OptimizerW(OptimWrap):
+#     optim_func = NotImplemented
+#     init_args = NotImplemented
+
+#     def __init__(self, callbacks=None, wd=0, wd_normalize=False,
+#                  nb_epochs=None, params=None):
+#         callbacks = callbacks if callbacks else {}
+#         if 'weight_decay' in callbacks.keys():
+#             raise ValueError("weight_decay allreday exists")
+#         self.weight_decay = cb.WeightDecay(wd, wd_normalize, nb_epochs)
+#         callbacks['weight_decay'] = self.weight_decay
+#         super().__init__(None, callbacks)
+#         # self.optimizer = None
+#         if params is not None:
+#             self.init_optimizer(params)
+
+#     def __call__(self, params):
+#         self.init_optimizer(params)
+#         return self
+
+#     def init_optimizer(self, params):
+#         call_args = set(self.optim_func.__init__.__code__.co_varnames[1:])
+#         init_args = {name: self.init_args[name] for name in (call_args & self.init_args.keys())}
+#         self.optimizer = self.optim_func(params, **init_args)
+#         self.set_wd(self.init_args['wd'])
+
+#     def reinitialize(self, params=None, **kwargs):
+#         if params is None:
+#             if hasattr(self, 'model'):
+#                 params = self.model.net.parameters()
+#         init_args = self.init_args.copy()
+#         init_args.update(kwargs)
+#         return self._constructor(**init_args, params=params)
+
+#     @property
+#     def _constructor(self):
+#         raise NotImplementedError
+
+
+# class AdamW(OptimizerW):
+class AdamW(OptimizerDecoupledWeightDecay):
+    optim_func = optim.Adam
+    def __init__(self, lr=1e-3, betas=(0.9, 0.99), decoupled_weight_decay=0., dwd_normalize=False,
                  nb_epochs=None, eps=1e-8, params=None):
-        self.init_args = dict(lr=lr, betas=betas, eps=eps, wd=wd, wd_normalize=wd_normalize,
-                              nb_epochs=nb_epochs)
-        super().__init__(None, wd, wd_normalize, nb_epochs, params)
+        self.init_args = dict(lr=lr, betas=betas, eps=eps, decoupled_weight_decay=decoupled_weight_decay,
+                              dwd_normalize=dwd_normalize, nb_epochs=nb_epochs)
+        super().__init__(decoupled_weight_decay, dwd_normalize, nb_epochs, params)
 
     @property
     def _constructor(self):
         return AdamW
 
 
-class AdamWR(OptimizerW):
+class AdamWR(OptimizerDecoupledWeightDecay):
     """Adam with decoupled weight decay and warm restarts
     Eta is multiplied with this learning rate.
     
@@ -142,24 +225,22 @@ class AdamWR(OptimizerW):
         eps {[type]} --  (default: {1e-8})
     """
     optim_func = optim.Adam
-
-    def __init__(self, lr=1e-3, betas=(0.9, 0.99), wd=0., wd_normalize=True, 
+    def __init__(self, lr=1e-3, betas=(0.9, 0.99), decoupled_weight_decay=0., dwd_normalize=True, 
                  cycle_len=1, cycle_multiplier=2, cycle_eta_multiplier=1.,
                  eta_min=0, params=None, eps=1e-8):
 
-        self.init_args = dict(lr=lr, betas=betas, eps=eps, wd=wd, wd_normalize=wd_normalize,
-                              cycle_len=cycle_len, cycle_multiplier=cycle_multiplier,
-                              cycle_eta_multiplier=cycle_eta_multiplier,
-                              eta_min=eta_min)
+        self.init_args = dict(lr=lr, betas=betas, eps=eps, decoupled_weight_decay=decoupled_weight_decay,
+                              dwd_normalize=dwd_normalize, cycle_len=cycle_len, cycle_multiplier=cycle_multiplier,
+                              cycle_eta_multiplier=cycle_eta_multiplier, eta_min=eta_min)
         self.lr_scheduler = cb.LRCosineAnnealing(cycle_len, cycle_multiplier,
                                                  cycle_eta_multiplier,eta_min)
         callbacks = {'lr_scheduler': self.lr_scheduler}
-        nb_epochs = self.lr_scheduler.get_cycle_len if wd_normalize else None
-        super().__init__(callbacks, wd, wd_normalize, nb_epochs, params)
+        nb_epochs = self.lr_scheduler.get_cycle_len if dwd_normalize else None
+        super().__init__(decoupled_weight_decay, dwd_normalize, nb_epochs, params, callbacks)
     
     def drop_scheduler(self):
         self.callbacks.pop('lr_scheduler')
-        self.weight_decay.nb_epochs = 1
+        self.decoupled_weight_decay.nb_epochs = 1
 
     @property
     def _constructor(self):
