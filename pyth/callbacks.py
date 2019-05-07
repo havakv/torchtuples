@@ -830,10 +830,13 @@ class _ActionOnBestMetric(Callback):
         self.load_best = load_best
         self.rm_file = rm_file
         self.file_path = file_path if file_path else make_name_hash('weight_checkpoint')
+        self.file_path = Path(self.file_path)
         self.cur_best = np.inf if self.minimize else -np.inf
         self._iter_since_best = 0
 
     def on_fit_start(self):
+        if not self.file_path.exists() and self._checkpoint_model:
+            self.model.save_model_weights(self.file_path)
         if self.get_score is None:
             if self.dataset == 'val':
                 metrics = self.model.val_metrics
@@ -871,9 +874,8 @@ class _ActionOnBestMetric(Callback):
         self.model.load_model_weights(self.file_path)
 
     def rm_weight_file(self):
-        path = Path(self.file_path)
-        if path.exists():
-            path.unlink()
+        if self.file_path.exists():
+            self.file_path.unlink()
 
 
 class BestWeights(_ActionOnBestMetric):
