@@ -721,93 +721,93 @@ class WeightDecay(Callback):
         return False
 
 
-class EarlyStoppingCycle(Callback):
-    '''
-    TODO: Should rewrite with _ActionOnBestMetric.
+# class EarlyStoppingCycle_old(Callback):
+#     '''
+#     TODO: Should rewrite with _ActionOnBestMetric.
 
-    Stop training when monitored quantity has not improved the last cycle.
-    Takes a Monitor object that is also a callback.
-    Use first metric in mm_obj to determine early stopping.
+#     Stop training when monitored quantity has not improved the last cycle.
+#     Takes a Monitor object that is also a callback.
+#     Use first metric in mm_obj to determine early stopping.
 
-    Parameters:
-        mm_obj: Monitor object, where first metric is used for early stopping.
-            E.g. MonitorSurvival(df_val, 'cindex').
-        get_score: Function for obtaining current scores. If string, we use validation metric.
-            Default is 'loss' which gives validation loss.
-        minimize: If we are to minimize or maximize monitor.
-        min_delta: Minimum change in the monitored quantity to qualify as an improvement,
-            i.e. an absolute change of less than min_delta, will count as no improvement.
-        patience: Number of cycles patience.
-        model_file_path: If spesified, the model weights will be stored whever a better score
-            is achieved.
-    '''
-    def __init__(self, lr_scheduler='optimizer', get_score='loss', minimize=True, min_delta=0,
-                 patience=1, min_cycles=4, model_file_path=None, load_best=False):
-        self.get_score = get_score
-        self._get_score = self.get_score
-        self.minimize = minimize
-        self.min_delta = min_delta
-        self.patience = patience
-        self.min_cycles = min_cycles
-        self.model_file_path = model_file_path
-        self.load_best = load_best
-        if self.load_best and (self.model_file_path is None):
-            raise ValueError("To use 'load_best' you need to provide a model_file_path")
-        self.lr_scheduler = lr_scheduler
-        self.cur_best = np.inf if self.minimize else -np.inf
-        self.cur_best_cycle_nb = None
+#     Parameters:
+#         mm_obj: Monitor object, where first metric is used for early stopping.
+#             E.g. MonitorSurvival(df_val, 'cindex').
+#         get_score: Function for obtaining current scores. If string, we use validation metric.
+#             Default is 'loss' which gives validation loss.
+#         minimize: If we are to minimize or maximize monitor.
+#         min_delta: Minimum change in the monitored quantity to qualify as an improvement,
+#             i.e. an absolute change of less than min_delta, will count as no improvement.
+#         patience: Number of cycles patience.
+#         model_file_path: If spesified, the model weights will be stored whever a better score
+#             is achieved.
+#     '''
+#     def __init__(self, lr_scheduler='optimizer', get_score='loss', minimize=True, min_delta=0,
+#                  patience=1, min_cycles=4, model_file_path=None, load_best=False):
+#         self.get_score = get_score
+#         self._get_score = self.get_score
+#         self.minimize = minimize
+#         self.min_delta = min_delta
+#         self.patience = patience
+#         self.min_cycles = min_cycles
+#         self.model_file_path = model_file_path
+#         self.load_best = load_best
+#         if self.load_best and (self.model_file_path is None):
+#             raise ValueError("To use 'load_best' you need to provide a model_file_path")
+#         self.lr_scheduler = lr_scheduler
+#         self.cur_best = np.inf if self.minimize else -np.inf
+#         self.cur_best_cycle_nb = None
 
-    def on_fit_start(self):
-        if type(self.get_score) is str:
-            self.get_score = lambda: self.model.val_metrics.scores[self._get_score]['score'][-1]
-        if self.lr_scheduler == 'optimizer':
-            self.lr_scheduler = self.model.optimizer.lr_scheduler
+#     def on_fit_start(self):
+#         if type(self.get_score) is str:
+#             self.get_score = lambda: self.model.val_metrics.scores[self._get_score]['score'][-1]
+#         if self.lr_scheduler == 'optimizer':
+#             self.lr_scheduler = self.model.optimizer.lr_scheduler
         
-    def on_epoch_end(self):
-        etas = self.lr_scheduler.get_etas()[:-1]  # Drop last because allready updated by optimizer
-        cycle_nb = (np.diff(etas) > 0).sum()
-        score = self.get_score()
+#     def on_epoch_end(self):
+#         etas = self.lr_scheduler.get_etas()[:-1]  # Drop last because allready updated by optimizer
+#         cycle_nb = (np.diff(etas) > 0).sum()
+#         score = self.get_score()
 
-        if self.minimize:
-            if score < (self.cur_best - self.min_delta):
-                self.cur_best = score
-                self.cur_best_cycle_nb = cycle_nb
-        else:
-            if score > (self.cur_best + self.min_delta):
-                self.cur_best = score
-                self.cur_best_cycle_nb = cycle_nb
+#         if self.minimize:
+#             if score < (self.cur_best - self.min_delta):
+#                 self.cur_best = score
+#                 self.cur_best_cycle_nb = cycle_nb
+#         else:
+#             if score > (self.cur_best + self.min_delta):
+#                 self.cur_best = score
+#                 self.cur_best_cycle_nb = cycle_nb
 
-        if (score == self.cur_best) and (self.model_file_path is not None):
-            self.model.save_model_weights(self.model_file_path)
+#         if (score == self.cur_best) and (self.model_file_path is not None):
+#             self.model.save_model_weights(self.model_file_path)
 
-        stop_signal = ((cycle_nb > (self.cur_best_cycle_nb + self.patience)) and 
-                       (cycle_nb >= self.min_cycles))
-        return stop_signal
+#         stop_signal = ((cycle_nb > (self.cur_best_cycle_nb + self.patience)) and 
+#                        (cycle_nb >= self.min_cycles))
+#         return stop_signal
 
-    def on_fit_end(self):
-        if self.load_best:
-            self.model.load_model_weights(self.model_file_path)
-        return super().on_fit_end()
+#     def on_fit_end(self):
+#         if self.load_best:
+#             self.model.load_model_weights(self.model_file_path)
+#         return super().on_fit_end()
 
 
 class StopIfExplodeOrNan(Callback):
-    """Stop trainig if training or validation loss explodes or becomes nan
+    """Stop trainig if training or validation loss becomes larger than a threshold or becomes nan.
+    Checks both train and val data.
 
     Keyword Arguments:
-        multiplier {float} -- Stop if 'loss' >= 'best_loss' * 'multiplier' (default: {10.})
+        threshold {float} -- Stop if train or val loss is 'nan' or larger than threshold (default: {np.inf})
+        metric {str} -- Whick metric in model.log.monitors should be used.(default: {'loss'})
     """
-    def __init__(self, multiplier=10.):
-        self.multiplier = multiplier
-        self.cur_best = dict(train_=np.inf, val_=np.inf)
+    def __init__(self, threshold=np.inf, metric='loss'):
+        self.threshold = threshold
+        self.metric = metric
 
     def _update_cur_best(self, key):
-        score = self.model.log.monitors[key].scores['loss']['score'][-1]
+        score = self.model.log.monitors[key].scores[self.metric]['score'][-1]
         if np.isnan(score):
             return True
-        cur_best = self.cur_best[key]
-        if score >= (self.multiplier * cur_best):
+        if score >= self.threshold:
             return True
-        self.cur_best[key] = min(score, cur_best)
         return False
 
     def on_epoch_end(self):
@@ -897,3 +897,47 @@ class EarlyStopping(_ActionOnBestMetric):
     def on_epoch_end(self):
         super().on_epoch_end()
         return self._iter_since_best >= self.patience
+
+class EarlyStoppingCycle(_ActionOnBestMetric):
+    def __init__(self, metric='loss', dataset='val', lr_scheduler='optimizer', get_score=None,
+                 minimize=True, min_delta=0., patience=1, min_cycles=4, checkpoint_model=True,
+                 file_path=None, load_best=True, rm_file=True):
+        self.lr_scheduler = lr_scheduler
+        self.patience = patience
+        self.min_cycles = min_cycles
+        self.cur_best_cycle_nb = None
+        super().__init__(metric, dataset, get_score, minimize, min_delta, checkpoint_model,
+                         file_path, load_best, rm_file)
+
+    def on_fit_start(self):
+        if self.lr_scheduler == 'optimizer':
+            self.lr_scheduler = self.model.optimizer.lr_scheduler
+        return super().on_fit_start()
+
+    def get_current_cycle_nb(self):
+        """Get current cycle number"""
+        etas = self.lr_scheduler.get_etas()[:-1]  # Drop last because allready updated by optimizer
+        return (np.diff(etas) > 0).sum()
+
+    def on_epoch_end(self):
+        cycle_nb = self.get_current_cycle_nb()
+        score = self.get_score()
+
+        if self.minimize:
+            if score < (self.cur_best - self.min_delta):
+                self.cur_best = score
+                self._iter_since_best = -1
+                self.cur_best_cycle_nb = cycle_nb
+        else:
+            if score > (self.cur_best + self.min_delta):
+                self.cur_best = score
+                self._iter_since_best = -1
+                self.cur_best_cycle_nb = cycle_nb
+        self._iter_since_best += 1
+        
+        if (score == self.cur_best) and (self._checkpoint_model):
+            self.model.save_model_weights(self.file_path)
+
+        stop_signal = ((cycle_nb > (self.cur_best_cycle_nb + self.patience)) and 
+                       (cycle_nb >= self.min_cycles))
+        return stop_signal
