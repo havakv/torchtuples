@@ -12,24 +12,23 @@ requirements = [
 
 
 setup(
-    name='pyth',
-    version='0.0.0',
-    description="Helper for pytorch",
+    name='torchtuples',
+    version='0.0.1',
+    description="Model fitting for pytorch",
     author="Haavard Kvamme",
     author_email='haavard.kvamme@gmail.com',
-    url='https://github.com/havakv/pyth',
-    packages=find_packages(include=['pyth']),
+    url='https://github.com/havakv/torchtuples',
+    packages=find_packages(include=['torchtuples']),
     include_package_data=True,
     install_requires=requirements,
     license="BSD license",
     zip_safe=False,
-    keywords='pyth',
+    keywords='torchtuples',
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: BSD License',
         'Natural Language :: English',
-        'Programming Language :: Python :: 3.5',
-        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
     ],
 )
