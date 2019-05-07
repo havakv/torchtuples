@@ -1,1 +1,1 @@
-# torchtuples -- Fitting pytorch models
+# torchtuples -- for fitting pytorch models
