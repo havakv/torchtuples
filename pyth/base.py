@@ -25,8 +25,9 @@ class Model(object):
     Keyword Arguments:
         loss {function} -- Set function that is used for training 
             (e.g. binary_cross_entropy for torch) (default: {None})
-        optimizer {Optimizer} -- A torch optimizer or similar.
-            if 'None' set to pyth.optim.AdamW (default: {None})
+        optimizer {Optimizer} -- A torch optimizer or similar. Preferrably use pyth.optim instead of
+            torch.optim, as this allows for reinitialization, etc. If 'None' set to pyth.optim.AdamW.
+            (default: {None})
         device {str, int, torch.device} -- Device to compute on. (default: {None})
             Preferrably pass a torch.device object.
             If 'None': use default gpu if avaiable, else use cpu.
