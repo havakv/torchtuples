@@ -815,6 +815,8 @@ class StopIfExplodeOrNan(Callback):
 
 
 class _ActionOnBestMetric(Callback):
+    """Abstract class used for e.g. EarlyStopping.
+    """
     def __init__(self, metric='loss', dataset='val', get_score=None, minimize=True, min_delta=0.,
                  checkpoint_model=True, file_path=None, load_best=True, rm_file=True):
         self.metric = metric
@@ -879,6 +881,23 @@ class _ActionOnBestMetric(Callback):
 
 
 class BestWeights(_ActionOnBestMetric):
+    """
+    Keep trac of the weight of the best performin model.
+    If you also want early stopping, you can use EarlyStopping or EarlyStoppingCycle instead.
+    
+    Keyword Arguments:
+        metric {str} -- Metric in model.train_metrics or model.val_metrics (default: {'loss'})
+        dataset {str} -- Data set which is moitored train/val (default: {'val'})
+        get_score {[type]} -- Alternative to metric, where you can give a function that returns the
+            scores. (default: {None})
+        minimize {bool} -- If we are minimizing or maximizing the score (default: {True})
+        file_path {[type]} -- Alternative file path for model weight. If 'None' we generate one.
+            (default: {None})
+        load_best {bool} -- Load best weight into model object after training.
+            If 'False' this needs to be done by calling the method 'load_weights' (default: {True})
+        rm_file {bool} -- If we should delete the checkpoint weight file after finishing training.
+            (default: {True})
+    """
     def __init__(self, metric='loss', dataset='val', get_score=None, minimize=True, file_path=None,
                  load_best=True, rm_file=True):
         min_delta = 0.
@@ -888,6 +907,26 @@ class BestWeights(_ActionOnBestMetric):
 
 
 class EarlyStopping(_ActionOnBestMetric):
+    """
+    Stop training when monitored quantity has not improved the last epochs.
+    
+    Keyword Arguments:
+        metric {str} -- Metric in model.train_metrics or model.val_metrics (default: {'loss'})
+        dataset {str} -- Data set which is moitored train/val (default: {'val'})
+        get_score {[type]} -- Alternative to metric, where you can give a function that returns the
+            scores. (default: {None})
+        minimize {bool} -- If we are minimizing or maximizing the score (default: {True})
+        min_delta {[type]} -- Improvement required to consider the new score better than the
+            previous best. (default: {0.})
+        patience {int} -- Number of epochs to wait since the best score before stopping. (default: {10})
+        checkpoint_model {bool} -- If we should keep track of the best model weights. (default: {True})
+        file_path {[type]} -- Alternative file path for model weight. If 'None' we generate one.
+            (default: {None})
+        load_best {bool} -- Load best weight into model object after training.
+            If 'False' this needs to be done by calling the method 'load_weights' (default: {True})
+        rm_file {bool} -- If we should delete the checkpoint weight file after finishing training.
+            (default: {True})
+    """
     def __init__(self, metric='loss', dataset='val', get_score=None, minimize=True, min_delta=0.,
                  patience=10, checkpoint_model=True, file_path=None, load_best=True, rm_file=True):
         self.patience = patience
@@ -898,7 +937,31 @@ class EarlyStopping(_ActionOnBestMetric):
         super().on_epoch_end()
         return self._iter_since_best >= self.patience
 
+
 class EarlyStoppingCycle(_ActionOnBestMetric):
+    """
+    Stop training when monitored quantity has not improved the last cycles.
+    
+    Keyword Arguments:
+        metric {str} -- Metric in model.train_metrics or model.val_metrics (default: {'loss'})
+        dataset {str} -- Data set which is moitored train/val (default: {'val'})
+        lr_scheduler {str} -- lr_scheduler object. If 'optimizer' use model.optimizer.lr_scheduler.
+            (default: {'optimizer'})
+        get_score {[type]} -- Alternative to metric, where you can give a function that returns the
+            scores. (default: {None})
+        minimize {bool} -- If we are minimizing or maximizing the score (default: {True})
+        min_delta {[type]} -- Improvement required to consider the new score better than the
+            previous best. (default: {0.})
+        patience {int} -- Number of cycles to wait since the best score before stopping. (default: {1})
+        min_cycles {int} -- Minimum number of cycles required before stopping. (default: {4})
+        checkpoint_model {bool} -- If we should keep track of the best model weights. (default: {True})
+        file_path {[type]} -- Alternative file path for model weight. If 'None' we generate one.
+            (default: {None})
+        load_best {bool} -- Load best weight into model object after training.
+            If 'False' this needs to be done by calling the method 'load_weights' (default: {True})
+        rm_file {bool} -- If we should delete the checkpoint weight file after finishing training.
+            (default: {True})
+    """
     def __init__(self, metric='loss', dataset='val', lr_scheduler='optimizer', get_score=None,
                  minimize=True, min_delta=0., patience=1, min_cycles=4, checkpoint_model=True,
                  file_path=None, load_best=True, rm_file=True):
