@@ -254,10 +254,6 @@ class Model(object):
         log = self.fit_dataloader(dataloader, epochs, callbacks, verbose, metrics, val_dataloader)
         return log
 
-    # legacy
-    fit_numpy = fit
-    fit_tensor = fit
-
     @contextlib.contextmanager
     def _lr_finder(self, lr_min, lr_max, lr_range, n_steps, tolerance, verbose):
         lr_lower, lr_upper = lr_range
