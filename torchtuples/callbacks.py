@@ -2,7 +2,6 @@
 Callbacks.
 '''
 import warnings
-import time
 from collections import OrderedDict, defaultdict
 from pathlib import Path
 import math
@@ -14,7 +13,7 @@ except:
 import torch
 import torchtuples
 from . import lr_scheduler 
-from torchtuples.utils import make_name_hash
+from torchtuples.utils import make_name_hash, TimeLogger
 
 
 class CallbackHandler:
@@ -240,7 +239,7 @@ class TrainingLogger(Callback):
         self._verbose = value
 
     def on_fit_start(self):
-        self.prev_time = time.time()
+        self.time_logger = TimeLogger()
 
     def on_epoch_end(self):
         self.epochs.append(self.epoch)
@@ -250,10 +249,9 @@ class TrainingLogger(Callback):
         return False
     
     def print_on_epoch_end(self):
-        new_time = time.time()
-        string = 'Epoch: %d,\ttime: %d sec,' % (self.epoch, new_time - self.prev_time)
+        tot, prev = self.time_logger.hms_diff()
+        string = f"{self.epoch}:\t[{prev} / {tot}],\t"
         print(string + self.get_measures())
-        self.prev_time = new_time
 
     def get_measures(self):
         measures = self.monitors
