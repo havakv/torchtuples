@@ -263,7 +263,10 @@ def tuplefy(*data, types=(list, tuple), stop_at_tuple=True):
             return TupleTree(_tuplefy(sub) for sub in data)
         return data
 
-    types = list(types)
+    if type(types) is type:
+        types = [types]
+    else:
+        types = list(types)
     if not stop_at_tuple:
         types.extend(_CONTAINERS)
     if (len(data) == 1) and ((type(data[0]) in types) or (type(data[0]) in _CONTAINERS)):
