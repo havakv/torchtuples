@@ -116,7 +116,7 @@ class TestTupleTree:
         torch.manual_seed(123)
         a = [torch.randn((i, j)) for i, j in [(5, 3), (5, 2)]]
         a = tuplefy(a, torch.randint(10,(5,)))
-        assert a.repeat(3).cat().lens() == ((10, 10), 10)
+        assert a.repeat(3).cat().lens() == ((15, 15), 15)
 
     def test_cat_split(self):
         torch.manual_seed(123)
