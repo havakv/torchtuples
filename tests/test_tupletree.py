@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 import torch
-from torchtuples.tupletree import TupleTree, tuplefy
+from torchtuples.tupletree import TupleTree, tuplefy, make_dataloader
 from torchtuples.testing import assert_tupletree_equal
 
 
@@ -14,6 +14,31 @@ def test_tuplefy_type(inp):
 def test_tuplefy_not_list(inp, types):
     t = tuplefy(inp, types=types)
     assert type(t[0]) is type(inp)
+
+@pytest.mark.parametrize('batch_size', [1, 3, 10, 12])
+@pytest.mark.parametrize('num_workers', [0, 1, 5])
+def test_make_data_loader_sorted(batch_size, num_workers):
+    torch.manual_seed(123)
+    a = tuplefy(torch.randn(10, 3), torch.randn(10))
+    dl = make_dataloader(a, batch_size, False, num_workers)
+    b = tuplefy()
+    for inp, tar in dl:
+        b = b + tuplefy(inp, tar).add_root()
+    assert_tupletree_equal(b.cat(), a)
+
+@pytest.mark.parametrize('batch_size', [1, 3, 10, 12])
+@pytest.mark.parametrize('num_workers', [0, 1, 5])
+def test_make_data_loader_unsorted(batch_size, num_workers):
+    torch.manual_seed(123)
+    a = tuplefy(torch.randn(10, 3), torch.randn(10))
+    dl = make_dataloader(a, batch_size, True, num_workers)
+    b = tuplefy()
+    for inp, tar in dl:
+        b = b + tuplefy(inp, tar).add_root()
+    b = b.cat()
+    assert_tupletree_equal(b.shapes(), a.shapes())
+    assert (tuplefy(a, b).apply(sum).zip_leaf().apply(lambda x: x[0]-x[1])
+            .apply(lambda x: x.max()).pipe(max) < 1e-6)
 
 
 class TestTupleTree:
