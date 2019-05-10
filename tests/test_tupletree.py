@@ -92,9 +92,6 @@ class TestTupleTree:
         a = tuplefy(a, np.random.choice(10, size=(4,)))
         b = a.to_tensor().to_numpy()
         assert_tupletree_equal(a, b)
-        # assert a.numerate() == b.numerate()
-        # assert a.dtypes() == b.dtypes()
-        # assert tuplefy(a, b).reduce(lambda x, y: (x == y).all()) == ((True, True), True)
 
     def test_torch2np2torch(self):
         torch.manual_seed(123)
@@ -102,9 +99,6 @@ class TestTupleTree:
         a = tuplefy(a, torch.randint(10,(4,)))
         b = a.to_numpy().to_tensor()
         assert_tupletree_equal(a, b)
-        # assert a.numerate() == b.numerate()
-        # assert a.dtypes() == b.dtypes()
-        # assert tuplefy(a, b).reduce(lambda x, y: (x == y).all()) == ((True, True), True)
 
     def test_iloc(self):
         torch.manual_seed(123)
@@ -113,13 +107,27 @@ class TestTupleTree:
         b = tuplefy((a[0][0][:2], a[0][1][:2]), a[1][:2])
         a = a.iloc[:2]
         assert_tupletree_equal(a, b)
-        # assert a.numerate() == b.numerate()
-        # assert a.dtypes() == b.dtypes()
-        # assert tuplefy(a, b).reduce(lambda x, y: (x == y).all()) == ((True, True), True)
 
     def test_add_root(self):
         a = tuplefy(1, 2, 3)
         assert a == a.add_root()[0]
 
+    def test_cat_lens(self):
+        torch.manual_seed(123)
+        a = [torch.randn((i, j)) for i, j in [(5, 3), (5, 2)]]
+        a = tuplefy(a, torch.randint(10,(5,)))
+        assert a.repeat(3).cat().lens() == ((10, 10), 10)
 
+    def test_cat_split(self):
+        torch.manual_seed(123)
+        a = [torch.randn((i, j)) for i, j in [(5, 3), (5, 2)]]
+        a = tuplefy(a, torch.randint(10,(5,)))
+        for sub in a.repeat(3).cat().split(5):
+            assert_tupletree_equal(a, sub)
 
+    def test_stack_shapes(self):
+        torch.manual_seed(123)
+        a = [torch.randn((i, j)) for i, j in [(5, 3), (5, 2)]]
+        a = tuplefy(a, torch.randint(10,(5,)))
+        b = tuplefy((torch.Size([3, 5, 3]), torch.Size([3, 5, 2])), torch.Size([3, 5]))
+        assert_tupletree_equal(a.repeat(3).stack().shapes(), b)
