@@ -2,6 +2,8 @@ import pytest
 import numpy as np
 import torch
 from torchtuples.tupletree import TupleTree, tuplefy
+from torchtuples.testing import assert_tupletree_equal
+
 
 @pytest.mark.parametrize('inp', [1, (1, 2), ['a', 2], [1, (1, 2)]])
 def test_tuplefy_type(inp):
@@ -89,18 +91,20 @@ class TestTupleTree:
         a = [np.random.normal(size=(i, j)).astype('float32') for i, j in [(2, 3), (1, 2)]]
         a = tuplefy(a, np.random.choice(10, size=(4,)))
         b = a.to_tensor().to_numpy()
-        assert a.numerate() == b.numerate()
-        assert a.dtypes() == b.dtypes()
-        assert tuplefy(a, b).reduce(lambda x, y: (x == y).all()) == ((True, True), True)
+        assert_tupletree_equal(a, b)
+        # assert a.numerate() == b.numerate()
+        # assert a.dtypes() == b.dtypes()
+        # assert tuplefy(a, b).reduce(lambda x, y: (x == y).all()) == ((True, True), True)
 
     def test_torch2np2torch(self):
         torch.manual_seed(123)
         a = [torch.randn((i, j)) for i, j in [(2, 3), (1, 2)]]
         a = tuplefy(a, torch.randint(10,(4,)))
         b = a.to_numpy().to_tensor()
-        assert a.numerate() == b.numerate()
-        assert a.dtypes() == b.dtypes()
-        assert tuplefy(a, b).reduce(lambda x, y: (x == y).all()) == ((True, True), True)
+        assert_tupletree_equal(a, b)
+        # assert a.numerate() == b.numerate()
+        # assert a.dtypes() == b.dtypes()
+        # assert tuplefy(a, b).reduce(lambda x, y: (x == y).all()) == ((True, True), True)
 
     def test_iloc(self):
         torch.manual_seed(123)
@@ -108,7 +112,14 @@ class TestTupleTree:
         a = tuplefy(a, torch.randint(10,(5,)))
         b = tuplefy((a[0][0][:2], a[0][1][:2]), a[1][:2])
         a = a.iloc[:2]
-        assert a.numerate() == b.numerate()
-        assert a.dtypes() == b.dtypes()
-        assert tuplefy(a, b).reduce(lambda x, y: (x == y).all()) == ((True, True), True)
+        assert_tupletree_equal(a, b)
+        # assert a.numerate() == b.numerate()
+        # assert a.dtypes() == b.dtypes()
+        # assert tuplefy(a, b).reduce(lambda x, y: (x == y).all()) == ((True, True), True)
+
+    def test_add_root(self):
+        a = tuplefy(1, 2, 3)
+        assert a == a.add_root()[0]
+
+
 

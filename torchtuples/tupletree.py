@@ -424,9 +424,12 @@ class TupleTree(tuple):
     def cat(self, dim=0):
         return cat(self, dim)
 
-    def reduce_nrec(self, func):
-        """Reduct non-recursive, only first list."""
-        return functools.reduce(func, self)
+    def reduce_nrec(self, func, initial=None):
+        """Reduct non-recursive, only first list. See 'functools.reduce'."""
+        if initial is None:
+            return functools.reduce(func, self)
+        else:
+            return functools.reduce(func, self, initial)
 
     def apply_nrec(self, func):
         """Apply non-recursive, only first list"""
