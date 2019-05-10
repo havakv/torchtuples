@@ -56,7 +56,7 @@ class Model(object):
         if type(self.net) is str:
             self.load_net(self.net)
         self.loss = loss
-        self.optimizer = optimizer if optimizer else AdamW
+        self.optimizer = optimizer if optimizer is not None else AdamW
         self.device = self._device_from__init__(device)
         self.net.to(self.device)
         # self.net_predict = net_predict if net_predict else self.net
