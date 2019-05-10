@@ -30,9 +30,11 @@ class TestOptimWrap:
         torch.optim.Adam,
         torch.optim.Adagrad,
     ])
-    def test_torch_optimizer_lr(self, optimizer_class):
-        optimizer = optimizer_class(self.net.parameters(), lr=0.1)
+    @pytest.mark.parametrize('lr', [0.1, 0.01, 0.5])
+    def test_torch_optimizer_lr(self, optimizer_class, lr):
+        optimizer = optimizer_class(self.net.parameters(), lr=lr)
         op = optim.OptimWrap(optimizer)
+        assert optimizer.param_groups[0]['lr'] == lr
         op.set_lr(0.1234)
         lr = optimizer.param_groups[0]['lr']
         assert lr == 0.1234
@@ -101,8 +103,10 @@ class TestOptimWrapReinit:
         optim.AdamW,
         optim.AdamWR,
     ])
-    def test_reinitialize(self, optim_class):
-        op = optim_class(lr=0.1234, params=self.net.parameters())
+    @pytest.mark.parametrize('lr', [0.1, 0.01, 0.5])
+    def test_reinitialize(self, optim_class, lr):
+        op = optim_class(lr=lr, params=self.net.parameters())
+        assert op.param_groups[0]['lr'] == lr
         sd = op.state_dict()
         op.set_lr(0.4321)
         op2 = op.reinitialize(self.net.parameters())
