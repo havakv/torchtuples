@@ -1,4 +1,6 @@
 """Code copied from pytorch source. Have just changed a couple of lines.
+
+We have made _DataLoaderIterSlice which use a different '_worker_loop' and 'collate_fn'.
 """
 
 import random

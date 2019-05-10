@@ -2,7 +2,8 @@ import functools
 import itertools
 import numpy as np
 import torch
-from torchtuples.data import DatasetTuple, DataLoaderSlice
+import torchtuples
+# from torchtuples.data import DatasetTuple, DataLoaderSlice
 
 
 def apply_leaf(func):
@@ -309,10 +310,11 @@ def make_dataloader(data, batch_size, shuffle, num_workers=0, to_tensor=True, ma
     if to_tensor:
         data = tuplefy(data).to_tensor()
     if make_dataset is None:
-        make_dataset = DatasetTuple
+        make_dataset = torchtuples.data.DatasetTuple
     # dataset = DatasetTuple(data)
     dataset = make_dataset(data)
-    dataloader = DataLoaderSlice(dataset, batch_size, shuffle=shuffle, num_workers=num_workers)
+    dataloader = torchtuples.data.DataLoaderSlice(dataset, batch_size, shuffle=shuffle,
+                                                  num_workers=num_workers)
     return dataloader
 
 
