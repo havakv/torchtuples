@@ -1,5 +1,4 @@
 import pytest
-import numpy as np
 import torch
 from torchtuples.tupletree import tuplefy
 from torchtuples.data import DatasetTuple, DataLoaderSlice

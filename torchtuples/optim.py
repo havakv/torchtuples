@@ -35,9 +35,9 @@ class OptimWrap(cb.CallbackHandler):
             param_group[key] = val
         # return self
 
-    def set_decoupled_weight_decay(self, wd):
-        """Set decoupled weight decay"""
-        return self.set('decoupled_weight_decay', wd)
+    # def set_decoupled_weight_decay(self, wd):
+    #     """Set decoupled weight decay"""
+    #     return self.set('decoupled_weight_decay', wd)
 
     def set_lr(self, lr):
         """Sets 'initial_lr' and 'lr' to value 'lr'"""
@@ -242,7 +242,7 @@ class OptimizerDecoupledWeightDecay(OptimWrapReinit):
 
     def init_optimizer(self, params):
         return super().init_optimizer(params)
-        self.set_decoupled_weight_decay(self.init_args['decoupled_weight_decay'])
+        # self.set_decoupled_weight_decay(self.init_args['decoupled_weight_decay'])
 
 
 class AdamW(OptimizerDecoupledWeightDecay):
