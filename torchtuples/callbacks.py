@@ -25,7 +25,7 @@ class CallbackHandler:
                 cb_as_dict[self._make_name(cb)] = cb
             callbacks = cb_as_dict
         self.callbacks = OrderedDict(callbacks)
-        self.model = None
+        # self.model = None
 
     def _make_name(self, obj):
         name = obj.__class__.__name__
@@ -42,7 +42,8 @@ class CallbackHandler:
         self.append(callback, name)
 
     def append(self, callback, name=None):
-        if self.model is None:
+        # if self.model is None:
+        if not hasattr(self, 'model'):
             raise RuntimeError("Can only call append after the callback has received the model.")
         callback.give_model(self.model)
         if name is None:
