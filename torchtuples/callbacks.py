@@ -25,13 +25,6 @@ class CallbackHandler:
         else:
             self.callbacks = OrderedDict(callbacks)
 
-        #     cb_as_dict = OrderedDict()
-        #     for cb in callbacks:
-        #         cb_as_dict[self._make_name(cb)] = cb
-        #     callbacks = cb_as_dict
-        # self.callbacks = OrderedDict(callbacks)
-        # self.model = None
-
     def _make_name(self, obj):
         name = type(obj).__name__
         i = 0
@@ -50,9 +43,6 @@ class CallbackHandler:
         self.append(callback, name)
 
     def append(self, callback, name=None):
-        # if self.model is None:
-        # if not hasattr(self, 'model'):
-            # raise RuntimeError("Can only call append after the callback has received the model.")
         if hasattr(self, 'model'):
             callback.give_model(self.model)
         if name is None:
@@ -77,7 +67,6 @@ class CallbackHandler:
         for c in self.values():
             stop = func(c)
             stop = stop if stop else False
-            # stop_signal += stop
             stop_signal = stop_signal or stop
         return stop_signal
 
@@ -129,27 +118,6 @@ class TrainingCallbackHandler(CallbackHandler):
             else:
                 for name, c in callbacks.items():
                     self[name] = c
-
-        # self.callbacks = OrderedDict()
-        # self.callbacks['optimizer'] = optimizer
-        # self.callbacks['train_metrics'] = train_metrics
-        # if val_metrics:
-        #     self.callbacks['val_metrics'] = val_metrics
-        # self.callbacks['log'] = log
-
-        # if type(callbacks) in (list, tuple):
-        #     cb_as_dict = OrderedDict()
-        #     for cb in callbacks:
-        #         cb_as_dict[self._make_name(cb)] = cb
-        #     callbacks = cb_as_dict
-        # if callbacks is not None:
-        #     callbacks = OrderedDict(callbacks)
-        #     for name, cb in callbacks.items():
-        #         assert name not in self.callbacks.keys(), f"Duplicate name: {name}"
-        #         self.callbacks[name] = cb
-
-        # self.callbacks.move_to_end('log')
-        # # self.model = None
 
     def append(self, callback, name=None):
         super().append(callback, name)

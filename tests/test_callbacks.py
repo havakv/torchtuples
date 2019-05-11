@@ -21,12 +21,6 @@ class TestCallbackHandler:
         cbh = cb.CallbackHandler([cb.Callback(), cb.Callback()])
         assert len(cbh) == 2
 
-    # def test_append_before_model(self):
-    #     cbh = cb.CallbackHandler([cb.Callback()])
-    #     with pytest.raises(RuntimeError) as ex:
-    #         cbh.append(cb.Callback())
-    #     assert str(ex.value) == "Can only call append after the callback has received the model."
-
     def test_append_model(self):
         cbh = cb.CallbackHandler([cb.Callback()])
         cbh.append(cb.Callback())
