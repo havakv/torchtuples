@@ -244,6 +244,11 @@ class OptimizerDecoupledWeightDecay(OptimWrapReinit):
         return super().init_optimizer(params)
         # self.set_decoupled_weight_decay(self.init_args['decoupled_weight_decay'])
 
+    def step(self, closure=None):
+        if not hasattr(self, 'model'):
+            raise RuntimeError("Optimizer with decoupled weight decay needs assignent of a 'Model' to function properly")
+        return super().step(closure)
+
 
 class AdamW(OptimizerDecoupledWeightDecay):
     optim_func = optim.Adam

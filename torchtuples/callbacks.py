@@ -667,6 +667,8 @@ def _smooth_curve(vals, beta=0.98):
 class DecoupledWeightDecay(Callback):
     """Same weight decay for all groups in the optimizer."""
     def __init__(self, weight_decay, normalized=False, nb_epochs=None):
+        if (weight_decay >= 1) or (weight_decay < 0):
+            warnings.warn(f"Weigth decay should be in in [0, 1), got {weight_decay}")
         self.weight_decay = weight_decay
         self.normalized = normalized
         # if self.normalized:

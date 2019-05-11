@@ -1,7 +1,7 @@
 
 import pytest
 import torch
-from torchtuples import optim
+from torchtuples import optim, Model
 from torchtuples.tupletree import TupleTree
 from torchtuples.testing import assert_tupletree_equal
 
@@ -153,10 +153,8 @@ class TestOptimWrapReinit:
         optim.SGD,
         optim.RMSprop,
         optim.Adam,
-        optim.AdamW,
-        optim.AdamWR,
     ])
-    def test_step(self, optim_class):
+    def test_step_without_model(self, optim_class):
         torch.manual_seed(1234)
         net = torch.nn.Linear(5, 1)
         op = optim_class(lr=0.1)
@@ -166,6 +164,43 @@ class TestOptimWrapReinit:
         inp = torch.randn(10, 5)
         net(inp).mean().backward()
         op.step()
+        new_params = get_params(net)
+        with pytest.raises(AssertionError) as ex:
+            assert_tupletree_equal(params, new_params)
+        assert str(ex.value) == "Not equal values"
+
+    @pytest.mark.parametrize('optim_class', [
+        optim.AdamW,
+        optim.AdamWR,
+    ])
+    def test_step_without_model_error_w(self, optim_class):
+        torch.manual_seed(1234)
+        net = torch.nn.Linear(5, 1)
+        op = optim_class(lr=0.1)
+        op(net.parameters())
+        op.zero_grad()
+        params = get_params(net)
+        inp = torch.randn(10, 5)
+        net(inp).mean().backward()
+        with pytest.raises(RuntimeError) as ex:
+            op.step()
+        assert (str(ex.value) ==
+                "Optimizer with decoupled weight decay needs assignent of a 'Model' to function properly")
+
+    @pytest.mark.parametrize('optim_class', [
+        optim.SGD,
+        optim.RMSprop,
+        optim.Adam,
+        optim.AdamW,
+        optim.AdamWR,
+    ])
+    def test_step_with_model(self, optim_class):
+        torch.manual_seed(1234)
+        inp, tar = torch.randn(10, 3), torch.randn(10)
+        net = torch.nn.Linear(3, 1)
+        model = Model(net, torch.nn.MSELoss(), optim_class(lr=0.1))
+        params = get_params(net)
+        model.fit(inp, tar, verbose=False)
         new_params = get_params(net)
         with pytest.raises(AssertionError) as ex:
             assert_tupletree_equal(params, new_params)
