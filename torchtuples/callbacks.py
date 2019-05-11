@@ -18,22 +18,30 @@ from torchtuples.utils import make_name_hash, TimeLogger
 
 class CallbackHandler:
     def __init__(self, callbacks):
-        self.callbacks = OrderedDict()
-        if type(callbacks) in (list, tuple):
-            cb_as_dict = OrderedDict()
-            for cb in callbacks:
-                cb_as_dict[self._make_name(cb)] = cb
-            callbacks = cb_as_dict
-        self.callbacks = OrderedDict(callbacks)
+        if type(callbacks) in (list, tuple, torchtuples.TupleTree):
+            self.callbacks = OrderedDict()
+            for c in callbacks:
+                self[self._make_name(c)] = c
+        else:
+            self.callbacks = OrderedDict(callbacks)
+
+        #     cb_as_dict = OrderedDict()
+        #     for cb in callbacks:
+        #         cb_as_dict[self._make_name(cb)] = cb
+        #     callbacks = cb_as_dict
+        # self.callbacks = OrderedDict(callbacks)
         # self.model = None
 
     def _make_name(self, obj):
-        name = obj.__class__.__name__
+        name = type(obj).__name__
         i = 0
-        while name in self.callbacks.keys():
-            name = name + '_' + str(i)
+        new_name = name
+        while new_name in self.keys():
+            new_name = f"{name}_{i}"
             i += 1
-        return name
+            if i >= 100:
+                raise RuntimeError("Stopped while loop. Too many callbacks with same name")
+        return new_name
     
     def __getitem__(self, name):
         return self.callbacks[name]
@@ -43,9 +51,10 @@ class CallbackHandler:
 
     def append(self, callback, name=None):
         # if self.model is None:
-        if not hasattr(self, 'model'):
-            raise RuntimeError("Can only call append after the callback has received the model.")
-        callback.give_model(self.model)
+        # if not hasattr(self, 'model'):
+            # raise RuntimeError("Can only call append after the callback has received the model.")
+        if hasattr(self, 'model'):
+            callback.give_model(self.model)
         if name is None:
             name = self._make_name(callback)
         assert name not in self.callbacks.keys(), f"Duplicate name: {name}"
@@ -110,33 +119,44 @@ class TrainingCallbackHandler(CallbackHandler):
     '''Object for holding all callbacks.
     '''
     def __init__(self, optimizer, train_metrics, log, val_metrics=None, callbacks=None):
-        self.callbacks = OrderedDict()
-        self.callbacks['optimizer'] = optimizer
-        self.callbacks['train_metrics'] = train_metrics
+        super().__init__(dict(log=log, optimizer=optimizer, train_metrics=train_metrics))
         if val_metrics:
-            self.callbacks['val_metrics'] = val_metrics
-        self.callbacks['log'] = log
-
-        if type(callbacks) in (list, tuple):
-            cb_as_dict = OrderedDict()
-            for cb in callbacks:
-                cb_as_dict[self._make_name(cb)] = cb
-            callbacks = cb_as_dict
+            self['val_metrics'] = val_metrics
         if callbacks is not None:
-            callbacks = OrderedDict(callbacks)
-            for name, cb in callbacks.items():
-                assert name not in self.callbacks.keys(), f"Duplicate name: {name}"
-                self.callbacks[name] = cb
+            if type(callbacks) in (list, tuple, torchtuples.TupleTree):
+                for c in callbacks:
+                    self.append(c)
+            else:
+                for name, c in callbacks.items():
+                    self[name] = c
 
-        self.callbacks.move_to_end('log')
-        self.model = None
+        # self.callbacks = OrderedDict()
+        # self.callbacks['optimizer'] = optimizer
+        # self.callbacks['train_metrics'] = train_metrics
+        # if val_metrics:
+        #     self.callbacks['val_metrics'] = val_metrics
+        # self.callbacks['log'] = log
+
+        # if type(callbacks) in (list, tuple):
+        #     cb_as_dict = OrderedDict()
+        #     for cb in callbacks:
+        #         cb_as_dict[self._make_name(cb)] = cb
+        #     callbacks = cb_as_dict
+        # if callbacks is not None:
+        #     callbacks = OrderedDict(callbacks)
+        #     for name, cb in callbacks.items():
+        #         assert name not in self.callbacks.keys(), f"Duplicate name: {name}"
+        #         self.callbacks[name] = cb
+
+        # self.callbacks.move_to_end('log')
+        # # self.model = None
 
     def append(self, callback, name=None):
         super().append(callback, name)
         self.callbacks.move_to_end('log')
 
 
-class Callback(object):
+class Callback:
     '''Temple for how to write callbacks.
     '''
     def give_model(self, model):
