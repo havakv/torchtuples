@@ -16,6 +16,35 @@ from . import lr_scheduler
 from torchtuples.utils import make_name_hash, TimeLogger
 
 
+class Callback:
+    '''Temple for how to write callbacks.
+    '''
+    def give_model(self, model):
+        self.model = model
+
+    def on_fit_start(self):
+        pass
+
+    def on_epoch_start(self):
+        pass
+
+    def on_batch_start(self):
+        pass
+
+    def before_step(self):
+        """Called after loss.backward(), but before optim.step()."""
+        pass
+
+    def on_batch_end(self):
+        pass
+
+    def on_epoch_end(self):
+        pass
+
+    def on_fit_end(self):
+        pass
+
+
 class CallbackHandler:
     def __init__(self, callbacks):
         if type(callbacks) in (list, tuple, torchtuples.TupleTree):
@@ -124,86 +153,6 @@ class TrainingCallbackHandler(CallbackHandler):
         self.callbacks.move_to_end('log')
 
 
-class Callback:
-    '''Temple for how to write callbacks.
-    '''
-    def give_model(self, model):
-        self.model = model
-
-    def on_fit_start(self):
-        pass
-
-    def on_epoch_start(self):
-        pass
-
-    def on_batch_start(self):
-        pass
-
-    def before_step(self):
-        """Called after loss.backward(), but before optim.step()."""
-        pass
-
-    def on_batch_end(self):
-        pass
-
-    def on_epoch_end(self):
-        pass
-
-    def on_fit_end(self):
-        pass
-
-
-# class PlotProgress(Callback):
-#     '''Plott progress
-
-#     Parameters:
-#         monitor: Dict with names and Moniro objects.
-#         filename: Filename (without ending).
-#         type: If 'altair' plot with altair.
-#             If not, type is given as fileending to matplotlib.
-#     '''
-#     def __init__(self, monitor, filename='progress', type='svg',
-#                  style='fivethirtyeight'):
-#         super().__init__()
-#         self.filename = filename
-#         self._first = True
-#         assert monitor.__class__ in [dict, OrderedDict], 'for now we need dict'
-#         self.monitor = monitor
-#         self.type = type
-#         self.style = style
-
-#     def on_epoch_end(self):
-#         if self._first:
-#             self._first = False
-#             return False
-
-#         with plt.style.context(self.style):
-#             self.to_pandas().plot()
-#             plt.savefig(self.filename+'.'+self.type)
-#         plt.close('all')
-#         return False
-
-
-#     def to_pandas(self, naming='prefix'):
-#         '''Get data in dataframe.
-
-#         Parameters:
-#             naming: Put name of metrix as prefix of suffix.
-#         '''
-#         warnings.warn('Need to updata this one')
-#         df = pd.DataFrame()
-#         if self.monitor.__class__ in [dict, OrderedDict]:
-#             for name, mm in self.monitor.items():
-#                 d = mm.to_pandas()
-#                 if naming == 'suffix':
-#                     df = df.join(d, how='outer', rsuffix=name)
-#                     continue
-#                 if naming == 'prefix':
-#                     d.columns = [name+'_'+c for c in d.columns]
-#                 df = df.join(d, how='outer')
-#         return df
-
-
 class TrainingLogger(Callback):
     def __init__(self, verbose=1):
         self.epoch = 0
@@ -270,61 +219,19 @@ class TrainingLogger(Callback):
         return self.to_pandas(colnames).plot(**kwargs)
 
 
-# class EarlyStopping(Callback):
-#     '''Stop training when monitored quantity has stopped improving.
-#     Takes a Monitor object and runs it as a callback.
-#     Use first metric in mm_obj to determine early stopping.
-
-#     Parameters:
-#         mm_obj: Monitor object, where first metric is used for early stopping.
-#             E.g. MonitorSurvival(df_val, 'cindex').
-#         minimize: If we are to minimize or maximize monitor.
-#         min_delta: Minimum change in the monitored quantity to qualify as an improvement,
-#             i.e. an absolute change of less than min_delta, will count as no improvement.
-#         patience: Number of epochs with no improvement after which training will be stopped.
-#         model_file_path: If spesified, the model weights will be stored whever a better score
-#             is achieved.
-#     '''
-#     def __init__(self, mm_obj, minimize=True, min_delta=0, patience=10, model_file_path=None):
-#         if True:
-#             raise NotImplementedError
-#         self.mm_obj = mm_obj
-#         self.minimize = minimize
-#         self.min_delta = min_delta
-#         self.patience = patience
-#         self.model_file_path = model_file_path
-#         self.cur_best = np.inf if self.minimize else -np.inf
-#         self.scores = []
-#         self.n = 0
-
-#     def on_epoch_end(self):
-#         score = self.mm_obj.scores[0][-1]
-#         self.scores.append(score)
-
-#         if self.minimize:
-#             if score < (self.cur_best - self.min_delta):
-#                 self.cur_best = score
-#                 self.n = -1
-#         else:
-#             if score > (self.cur_best + self.min_delta):
-#                 self.cur_best = score
-#                 self.n = -1
-#         self.n += 1
-
-#         if (self.n == 0) and (self.model_file_path is not None):
-#             self.model.save_model_weights(self.model_file_path)
-
-#         stop_signal = True if self.n >= self.patience else False
-#         return stop_signal
-
 
 class MonitorMetrics(Callback):
-    def __init__(self):
+    def __init__(self, per_epoch=1):
         self.scores = dict()
         self.epoch = -1
+        self.per_epoch = per_epoch
 
     def on_epoch_end(self):
         self.epoch += 1
+
+    def append_score_if_epoch(self, name, val):
+        if self.epoch % self.per_epoch == 0:
+            self.append_score(name, val)
     
     def append_score(self, name, val):
         scores = self.scores.get(name, {'epoch': [], 'score': []})
@@ -343,9 +250,9 @@ class MonitorMetrics(Callback):
 
 
 class _MonitorFitMetricsTrainData(MonitorMetrics):
-    def __init__(self, per_epoch=1):
-        super().__init__()
-        self.per_epoch = per_epoch
+    # def __init__(self, per_epoch=1):
+    #     super().__init__(per_epo)
+        # self.per_epoch = per_epoch
 
     def on_epoch_start(self):
         self.batch_metrics = defaultdict(list)
@@ -358,38 +265,30 @@ class _MonitorFitMetricsTrainData(MonitorMetrics):
 
     def on_epoch_end(self):
         super().on_epoch_end()
-        if self.epoch % self.per_epoch != 0:
-            return False
         for name, vals in self.batch_metrics.items():
-            self.append_score(name, np.mean(vals))
-        return False
+            self.append_score_if_epoch(name, np.mean(vals))
+        # if self.epoch % self.per_epoch != 0:
+        #     return False
+        # for name, vals in self.batch_metrics.items():
+        #     self.append_score(name, np.mean(vals))
+        # return False
 
 
 class MonitorFitMetrics(MonitorMetrics):
     def __init__(self, dataloader=None, per_epoch=1):
-        super().__init__()
+        super().__init__(per_epoch)
         self.dataloader = dataloader
-        self.per_epoch = per_epoch
-
-    @property
-    def dataloader(self):
-        return self._dataloader
-    
-    @dataloader.setter
-    def dataloader(self, dataloader):
-        self._dataloader = dataloader
 
     def on_epoch_end(self):
         super().on_epoch_end()
         if self.epoch % self.per_epoch != 0:
-            return False
+            return None
         if self.dataloader is None:
             scores = {name: np.nan for name in self.model.metrics.keys()}
         else:
             scores = self.model.score_in_batches_dataloader(self.dataloader)
         for name, val in scores.items():
             self.append_score(name, val)
-        return False
 
 
 class MonitorTrainMetrics(Callback):

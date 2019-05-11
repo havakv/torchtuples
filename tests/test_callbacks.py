@@ -1,8 +1,10 @@
 
 from collections import OrderedDict
 import pytest
+import numpy as np
+import pandas as pd
 import torch
-from torchtuples import optim, Model
+from torchtuples import optim, Model, tuplefy
 import torchtuples.callbacks as cb
 
 class MocModel:
@@ -14,6 +16,9 @@ class MocModel:
 class StopBeforeStep(cb.Callback):
     def before_step(self):
         return True
+
+def _identity_loss(input, target, *args, **kwargs):
+    return 1.
 
 
 class TestCallbackHandler:
@@ -206,3 +211,97 @@ class TestDecoupledWeightDecay:
         batches_per_epoch = model.fit_info['batches_per_epoch']
         wd = wd * math.sqrt(1 / (nb_epochs * batches_per_epoch))
         assert (net.weight.data == (weight - wd * weight)).all()
+
+
+class TestMonitorMetrics:
+    def test_append_score(self):
+        mm = cb.MonitorMetrics()
+        mm.on_epoch_end()
+        mm.append_score('foo', 1)
+        mm.on_epoch_end()
+        mm.append_score('foo', 5)
+        mm.append_score('bar', 2)
+        mm.on_epoch_end()
+        mm.append_score('bar', 4)
+        assert mm.scores['foo']['score'] == [1, 5]
+        assert mm.scores['foo']['epoch'] == [0, 1]
+        assert mm.scores['bar']['score'] == [2, 4]
+        assert mm.scores['bar']['epoch'] == [1, 2]
+
+    def test_append_score_if_epoch_every(self):
+        mm = cb.MonitorMetrics()
+        mm.on_epoch_end()
+        mm.append_score_if_epoch('foo', 1)
+        mm.on_epoch_end()
+        mm.append_score_if_epoch('foo', 5)
+        mm.append_score_if_epoch('bar', 2)
+        mm.on_epoch_end()
+        mm.append_score_if_epoch('bar', 4)
+        assert mm.scores['foo']['score'] == [1, 5]
+        assert mm.scores['foo']['epoch'] == [0, 1]
+        assert mm.scores['bar']['score'] == [2, 4]
+        assert mm.scores['bar']['epoch'] == [1, 2]
+
+    def test_append_score_if_epoch_2(self):
+        mm = cb.MonitorMetrics(per_epoch=2)
+        mm.on_epoch_end() # add
+        mm.append_score_if_epoch('foo', 1) 
+        mm.on_epoch_end() # not
+        mm.append_score_if_epoch('foo', 5)
+        mm.append_score_if_epoch('bar', 2)
+        mm.on_epoch_end() # add
+        mm.append_score_if_epoch('bar', 4)
+        mm.on_epoch_end() # not
+        mm.append_score_if_epoch('bar', 8)
+        mm.on_epoch_end() # add
+        mm.append_score_if_epoch('bar', 9)
+        assert mm.scores['foo']['score'] == [1]
+        assert mm.scores['foo']['epoch'] == [0]
+        assert mm.scores['bar']['score'] == [4, 9]
+        assert mm.scores['bar']['epoch'] == [2, 4]
+
+    def test_to_pandas(self):
+        mm = cb.MonitorMetrics()
+        mm.on_epoch_end()
+        mm.append_score('foo', 1)
+        mm.on_epoch_end()
+        mm.append_score('foo', 5)
+        mm.append_score('bar', 2)
+        mm.on_epoch_end()
+        mm.append_score('bar', 4)
+        df = mm.to_pandas()
+        assert type(df) is pd.DataFrame
+        df_true = pd.DataFrame(dict(foo=[1., 5., None], bar=[None, 2., 4.]))
+        pd.testing.assert_frame_equal(df, df_true)
+
+class TestMonitoFitMetrics:
+    def setup(self):
+        torch.manual_seed(1234)
+        self.inp, self.tar = torch.randn(10, 3), torch.randn(10)
+        self.net = torch.nn.Linear(3, 1)
+        self.optim_class = optim.SGD
+        self.model = Model(self.net, _identity_loss, self.optim_class(lr=0.1))
+        self.model.fit(self.inp, self.tar, epochs=0)
+
+    def test_add_nans(self):
+        mm = cb.MonitorFitMetrics()
+        mm.give_model(self.model)
+        mm.on_epoch_end()
+        mm.on_epoch_end()
+        assert mm.scores == {'loss': {'epoch': [0, 1], 'score': [np.nan, np.nan]}}
+
+    def test_add_identity(self):
+        dl = tuplefy(self.inp, self.tar).make_dataloader(10, False)
+        mm = cb.MonitorFitMetrics(dl)
+        mm.give_model(self.model)
+        mm.on_epoch_end()
+        mm.on_epoch_end()
+        assert mm.scores == {'loss': {'epoch': [0, 1], 'score': [1.0, 1.0]}}
+
+    def test_add_identity_2(self):
+        dl = tuplefy(self.inp, self.tar).make_dataloader(10, False)
+        mm = cb.MonitorFitMetrics(dl, 2)
+        mm.give_model(self.model)
+        for _ in range(5):
+            mm.on_epoch_end()
+        assert mm.scores == {'loss': {'epoch': [0, 2, 4], 'score': [1.0, 1.0, 1.0]}}
