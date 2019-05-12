@@ -7,7 +7,10 @@ from setuptools import setup, find_packages
 
 
 requirements = [
-    # TODO: Put package requirements here
+    'numpy>=1.15.4',
+    'pandas>=0.24.2',
+    'matplotlib>=3.0.3',
+    'torch>=1.1.0',
 ]
 
 
@@ -31,4 +34,5 @@ setup(
         'Natural Language :: English',
         'Programming Language :: Python :: 3.7',
     ],
+    python_requires='>=3.7'
 )
