@@ -19,6 +19,7 @@ def _accuracy(input, target):
 
 def accuracy_argmax(input, target):
     """Accuracy after argmax on input.
+    Tupycally used as a metric passed to Model.fit()
     If input is one dimensional, we assume we have binary classification.
     """
     if len(input.shape) == 1:

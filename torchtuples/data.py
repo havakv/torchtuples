@@ -5,6 +5,7 @@ and can potentially stop workers from shutting down at each batch.
 '''
 # import random
 import warnings
+import copy
 import torch
 # from torch.utils.data.dataloader import DataLoader, RandomSampler 
 # from torch.utils.data import Dataset
@@ -115,3 +116,33 @@ class DatasetTuple(torch.utils.data.Dataset):
         if not lens.all_equal():
             raise RuntimeError("Need all tensors to have same lenght.")
         return lens[0]
+
+
+class DatasetInputOnly:
+    """Class for chaning a Dataset contraining inputs and targets
+    to only return the inputs.
+    Usefurll for predict methods.
+    """
+    def __init__(self, dataset):
+        self.dataset = dataset
+
+    def __getitem__(self, index):
+        return self.dataset[index][0]
+
+
+def dataloader_input_only(dataloader):
+    """Create a new dataloader the only returns the inputs and not the targets.
+    Useful when calling predict:
+
+        dataloader = ...
+        model.fit(dataloader)
+        dl_input = dataloader_input_only(dataloader)
+        model.predict(dl_inpt)
+
+    See e.g. MNIST examples code.
+    """
+    if type(dataloader.sampler) is not torch.utils.data.sampler.SequentialSampler:
+        warnings.warn("Dataloader might not be deterministic!")
+    dl_new = copy.copy(dataloader)
+    dl_new.dataset = DatasetInputOnly(dl_new.dataset)
+    return dl_new

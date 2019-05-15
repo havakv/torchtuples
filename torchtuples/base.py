@@ -418,7 +418,8 @@ class Model(object):
                 input_train = self.fit_info['input']
                 if input.to_levels() != input_train['levels']:
                     raise RuntimeError("""The input from the dataloader is different from
-                    the 'input' during trainig. Make sure to remove target from dataloader""")
+                    the 'input' during trainig. Make sure to remove 'target' from dataloader.
+                    Can be done with 'torchtuples.data.dataloader_input_only'.""")
                 if input.shapes().apply(lambda x: x[1:]) != input_train['shapes']:
                     raise RuntimeError("""The input from the dataloader is different from
                     the 'input' during trainig. The shapes are different.""")

@@ -1,7 +1,7 @@
 import pytest
 import torch
 from torchtuples.tupletree import tuplefy
-from torchtuples.data import DatasetTuple, DataLoaderSlice
+from torchtuples.data import DatasetTuple, DataLoaderSlice, DatasetInputOnly, dataloader_input_only
 from torchtuples.testing import assert_tupletree_equal
 
 class TestDatasetTuple:
@@ -44,3 +44,12 @@ class TestDataLoaderSlice:
         b = next(iter(dl))
         assert_tupletree_equal(a, b)
 
+
+def test_dataloader_input_only():
+    n = 10
+    input = tuplefy(torch.randn(n, 3), torch.randn(n, 2))
+    target = torch.randn(n)
+    dl = tuplefy(input, target).make_dataloader(4, False)
+    dl_input = dataloader_input_only(dl)
+    for (inp, tar), inp2 in zip(dl, dl_input):
+        assert_tupletree_equal(inp, inp2)
