@@ -13,6 +13,24 @@ def init_embedding(emb):
     sc = 2 / (w.shape[1]+1)
     w.uniform_(-sc, sc)
 
+def _accuracy(input, target):
+    """Accuracy, i.e. mean(input == target)"""
+    return input.eq(target.view_as(input)).float().mean()
+
+def accuracy_argmax(input, target):
+    """Accuracy after argmax on input.
+    If input is one dimensional, we assume we have binary classification.
+    """
+    if len(input.shape) == 1:
+        input = input.view(-1, 1)
+        assert (target.min() == 0) and (target.max() == 1), 'We have binary classfication so we need 0/1'
+        pred = torch.zeros_like(input).to(target.dtype)
+        pred[input >= 0.5] = 1
+    else:
+        pred = input.argmax(dim=1, keepdim=True)
+    return _accuracy(pred, target)
+
+
 class LinearVanillaBlock(nn.Module):
     def __init__(self, in_features, out_features, bias=True, batch_norm=True, dropout=0., activation=nn.ReLU,
                  w_init_=lambda w: nn.init.kaiming_normal_(w, nonlinearity='relu')):
