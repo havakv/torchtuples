@@ -49,8 +49,9 @@ preds = model.predict(x)
 
 ## Installation
 
-**torchtuples** depends on PyTorch which should be installed from [here](https://pytorch.org/get-started/locally/).
-We recommend using python 3.7 as we have not tested the package for any previous versions.
+**torchtuples** depends on [PyTorch](https://pytorch.org/get-started/locally/) which should be installed from [HERE](https://pytorch.org/get-started/locally/).
+
+We recommend using **python 3.7** as we have not tested the package for any previous versions.
 
 Next, **torchtuples** can be installed by cloning the repo:
 ```bash
