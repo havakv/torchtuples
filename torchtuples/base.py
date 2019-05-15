@@ -128,7 +128,7 @@ class Model(object):
         def _tuple_info(tuple_):
             tuple_ = tuplefy(tuple_)
             return {'levels': tuple_.to_levels(), 'shapes': tuple_.shapes().apply(lambda x: x[1:])}
-        input, target = next(iter(dataloader))
+        input, target = dataloader.dataset[0]
         self.fit_info['input'] = _tuple_info(input)
     
     def _to_device(self, data):
@@ -409,7 +409,7 @@ class Model(object):
             [TupleTree, np.ndarray or tensor] -- Predictions
         """
         if hasattr(self, 'fit_info') and (self.make_dataloader is self.make_dataloader_predict):
-            input = tuplefy(next(iter(dataloader)))
+            input = tuplefy(dataloader.dataset[0])
             input_train = self.fit_info['input']
             if input.to_levels() != input_train['levels']:
                 raise RuntimeError("""The input from the dataloader is different from
