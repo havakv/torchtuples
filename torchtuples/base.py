@@ -9,7 +9,6 @@ import warnings
 import contextlib
 import numpy as np  # shoul be remved
 import torch
-from torch.utils.data import sampler
 import torchtuples.callbacks as cb
 from torchtuples.optim import AdamW, OptimWrap
 from torchtuples.tupletree import tuplefy, TupleTree, make_dataloader
@@ -128,8 +127,11 @@ class Model(object):
         def _tuple_info(tuple_):
             tuple_ = tuplefy(tuple_)
             return {'levels': tuple_.to_levels(), 'shapes': tuple_.shapes().apply(lambda x: x[1:])}
-        input, target = dataloader.dataset[0]
-        self.fit_info['input'] = _tuple_info(input)
+        # input, target = dataloader.dataset[0]
+        data = _get_element_in_dataloader(dataloader)
+        if data is not None:
+            input, target = data
+            self.fit_info['input'] = _tuple_info(input)
     
     def _to_device(self, data):
         """Move data to self.device.
@@ -409,14 +411,17 @@ class Model(object):
             [TupleTree, np.ndarray or tensor] -- Predictions
         """
         if hasattr(self, 'fit_info') and (self.make_dataloader is self.make_dataloader_predict):
-            input = tuplefy(dataloader.dataset[0])
-            input_train = self.fit_info['input']
-            if input.to_levels() != input_train['levels']:
-                raise RuntimeError("""The input from the dataloader is different from
-                the 'input' during trainig. Make sure to remove target from dataloader""")
-            if input.shapes().apply(lambda x: x[1:]) != input_train['shapes']:
-                raise RuntimeError("""The input from the dataloader is different from
-                the 'input' during trainig. The shapes are different.""")
+            # input = tuplefy(dataloader.dataset[0])
+            data = _get_element_in_dataloader(dataloader)
+            if data is not None:
+                input = tuplefy(data)
+                input_train = self.fit_info['input']
+                if input.to_levels() != input_train['levels']:
+                    raise RuntimeError("""The input from the dataloader is different from
+                    the 'input' during trainig. Make sure to remove target from dataloader""")
+                if input.shapes().apply(lambda x: x[1:]) != input_train['shapes']:
+                    raise RuntimeError("""The input from the dataloader is different from
+                    the 'input' during trainig. The shapes are different.""")
 
         if not eval_:
             warnings.warn("We still don't shuffle the data here... event though 'eval_' is True.")
@@ -483,3 +488,15 @@ class Model(object):
         if hasattr(self, 'device'):
             self.net.to(self.device)
         return self.net
+
+def _get_element_in_dataloader(dataloader):
+    dataset = dataloader.dataset
+    try:
+        return dataset[:1]
+    except:
+        pass
+    try:
+        return dataloader.collate_fn([dataset[0]])
+    except:
+        pass
+    return None
