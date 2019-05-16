@@ -17,16 +17,28 @@ def _accuracy(input, target):
     """Accuracy, i.e. mean(input == target)"""
     return input.eq(target.view_as(input)).float().mean()
 
+def accuracy_binary(input, target):
+    """Accuracy for binary models on input for logit models in (-inf, inf).
+    Do not used for models with sigmoid output activation.
+    """
+    if len(input.shape) == 1:
+        raise NotImplementedError(f"`accuracy_argmax` not implemented for shape {input.shape}")
+    assert (target.min() == 0) and (target.max() == 1), 'We have binary classfication so we need 0/1'
+    pred = torch.zeros_like(input).to(target.dtype)
+    pred[input >= 0.] = 1
+    return _accuracy(pred, target)
+
 def accuracy_argmax(input, target):
-    """Accuracy after argmax on input.
+    """Accuracy after argmax on input for logit models in (-inf, inf).
+    Do not used for models with sigmoid/softmax output activation.
+
     Tupycally used as a metric passed to Model.fit()
     If input is one dimensional, we assume we have binary classification.
     """
     if len(input.shape) == 1:
-        input = input.view(-1, 1)
-        assert (target.min() == 0) and (target.max() == 1), 'We have binary classfication so we need 0/1'
-        pred = torch.zeros_like(input).to(target.dtype)
-        pred[input >= 0.5] = 1
+        raise NotImplementedError(f"`accuracy_argmax` not implemented for shape {input.shape}")
+    if input.shape[1] == 1:
+        raise NotImplementedError("`accuracy_argmax` not for binary data. See `accuracy_binary` instead.")
     else:
         pred = input.argmax(dim=1, keepdim=True)
     return _accuracy(pred, target)
