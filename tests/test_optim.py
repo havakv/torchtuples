@@ -196,7 +196,7 @@ class TestOptimWrapReinit:
     ])
     def test_step_with_model(self, optim_class):
         torch.manual_seed(1234)
-        inp, tar = torch.randn(10, 3), torch.randn(10)
+        inp, tar = torch.randn(10, 3), torch.randn(10, 1)
         net = torch.nn.Linear(3, 1)
         model = Model(net, torch.nn.MSELoss(), optim_class(lr=0.1))
         params = get_params(net)
