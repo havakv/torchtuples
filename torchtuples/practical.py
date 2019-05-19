@@ -44,7 +44,7 @@ def accuracy_argmax(input, target):
     return _accuracy(pred, target)
 
 
-class LinearVanillaBlock(nn.Module):
+class DenseVanillaBlock(nn.Module):
     def __init__(self, in_features, out_features, bias=True, batch_norm=True, dropout=0., activation=nn.ReLU,
                  w_init_=lambda w: nn.init.kaiming_normal_(w, nonlinearity='relu')):
         super().__init__()
@@ -74,7 +74,7 @@ class MLPVanilla(nn.Module):
             dropout = [dropout for _ in range(len(num_nodes)-1)]
         net = []
         for n_in, n_out, p in zip(num_nodes[:-1], num_nodes[1:], dropout):
-            net.append(LinearVanillaBlock(n_in, n_out, True, batch_norm, p, activation, w_init_))
+            net.append(DenseVanillaBlock(n_in, n_out, True, batch_norm, p, activation, w_init_))
         net.append(nn.Linear(num_nodes[-1], out_features, output_bias))
         if output_activation:
             net.append(output_activation)
