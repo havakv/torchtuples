@@ -107,7 +107,7 @@ class DatasetTuple(torch.utils.data.Dataset):
             warnings.warn("All data is not torch.Tensor. Consider fixing this.")
 
     def __getitem__(self, index):
-        if not hasattr(index, '__iter__'):
+        if (not hasattr(index, '__iter__')) and (type(index) is not slice):
             index = [index]
         return self.data.iloc[index]
 

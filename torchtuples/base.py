@@ -493,11 +493,15 @@ class Model(object):
 def _get_element_in_dataloader(dataloader):
     dataset = dataloader.dataset
     try:
-        return dataset[:1]
+        return dataset[:2]
     except:
         pass
     try:
-        return dataloader.collate_fn([dataset[0]])
+        return dataset[[0, 1]]
+    except:
+        pass
+    try:
+        return dataloader.collate_fn([dataset[0], dataset[1]])
     except:
         pass
     return None
