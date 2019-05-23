@@ -856,7 +856,7 @@ class EarlyStoppingCycle(_ActionOnBestMetric):
         self.lr_scheduler = lr_scheduler
         self.patience = patience
         self.min_cycles = min_cycles
-        self.cur_best_cycle_nb = None
+        self.cur_best_cycle_nb = 0
         super().__init__(metric, dataset, get_score, minimize, min_delta, checkpoint_model,
                          file_path, load_best, rm_file)
 
@@ -892,3 +892,4 @@ class EarlyStoppingCycle(_ActionOnBestMetric):
         stop_signal = ((cycle_nb > (self.cur_best_cycle_nb + self.patience)) and 
                        (cycle_nb >= self.min_cycles))
         return stop_signal
+
