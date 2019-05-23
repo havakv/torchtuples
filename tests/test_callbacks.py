@@ -74,7 +74,7 @@ class TestCallbacksInModel:
         self.inp, self.tar = torch.randn(10, 3), torch.randn(10)
         self.net = torch.nn.Linear(3, 1)
         self.optim_class = optim.SGD
-        self.model = Model(self.net, torch.nn.MSELoss(), self.optim_class(lr=0.1))
+        self.model = Model(self.net, torch.nn.MSELoss(), self.optim_class(lr=0.1), device='cpu')
         self.model.fit(self.inp, self.tar, epochs=0)
 
     def test_callback_type(self):
@@ -101,11 +101,11 @@ class TestCallbacksInModel:
         inp, tar = torch.randn(10, 3), torch.randn(10)
         net = torch.nn.Linear(3, 1)
         optim_class = optim.SGD
-        self.model = Model(net, torch.nn.MSELoss(), optim_class(lr=0.1))
+        self.model = Model(net, torch.nn.MSELoss(), optim_class(lr=0.1), device='cpu')
         self.model.fit(inp, tar, epochs=0, callbacks=[cb.EarlyStopping()])
 
     def test_multiple_idential_list(self):
-        model = Model(self.net, torch.nn.MSELoss(), self.optim_class(lr=0.1))
+        model = Model(self.net, torch.nn.MSELoss(), self.optim_class(lr=0.1), device='cpu')
         cbs = [cb.Callback(), cb.Callback(), cb.Callback()]
         self.model.fit(self.inp, self.tar, epochs=0, callbacks=cbs)
         callbacks = self.model.callbacks
@@ -185,7 +185,7 @@ class TestDecoupledWeightDecay:
         net = torch.nn.Linear(3, 1)
         weight = net.weight.clone().data
         weight_decay = cb.DecoupledWeightDecay(wd)
-        model = Model(net, torch.nn.MSELoss(), optim_class(0.1))
+        model = Model(net, torch.nn.MSELoss(), optim_class(0.1), device='cpu')
         model.fit(inp, tar, callbacks=[weight_decay, StopBeforeStep()])
         assert (net.weight.data == (weight - wd * weight)).all()
 
@@ -206,7 +206,7 @@ class TestDecoupledWeightDecay:
         weight = net.weight.clone().data
         weight_decay = cb.DecoupledWeightDecay(wd, True, nb_epochs)
         batch_size = 2
-        model = Model(net, torch.nn.MSELoss(), optim_class(0.1))
+        model = Model(net, torch.nn.MSELoss(), optim_class(0.1), device='cpu')
         model.fit(inp, tar, batch_size, callbacks=[weight_decay, StopBeforeStep()])
         batches_per_epoch = model.fit_info['batches_per_epoch']
         wd = wd * math.sqrt(1 / (nb_epochs * batches_per_epoch))
@@ -280,7 +280,7 @@ class TestMonitoFitMetrics:
         self.inp, self.tar = torch.randn(10, 3), torch.randn(10)
         self.net = torch.nn.Linear(3, 1)
         self.optim_class = optim.SGD
-        self.model = Model(self.net, _identity_loss, self.optim_class(lr=0.1))
+        self.model = Model(self.net, _identity_loss, self.optim_class(lr=0.1), device='cpu')
         self.model.fit(self.inp, self.tar, epochs=0)
 
     def test_add_nans(self):
