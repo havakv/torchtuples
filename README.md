@@ -1,12 +1,29 @@
 # torchtuples 
 
-**torchtuples** is a small python package for training pytorch models where the data is in the form of nested tuples.
+**torchtuples** is a small python package for training pytorch models.
 It works equally well for numpy arrays and torch tensors.
+One of the main benefits of **torchtuples** is that it handles data in the form of nested tuples (see example below).
 
+
+## Installation
+
+**torchtuples** depends on [PyTorch](https://pytorch.org/get-started/locally/) which should be installed from [HERE](https://pytorch.org/get-started/locally/).
+
+We recommend using **python 3.7** as we have not tested the package for any previous versions.
+
+Next, **torchtuples** can be installed using pip:
+```bash
+pip install git+git://github.com/havakv/torchtuples.git
+```
+or by cloning the repo:
+```bash
+git clone https://github.com/havakv/torchtuples.git
+cd torchtuples
+python setup.py install
+```
 
 ## Example
 
-Let us illustrate this with minimal example:
 ```python
 import torch
 from torch import nn
@@ -45,17 +62,4 @@ log = model.fit(x, y, batch_size=64, epochs=5)
 and make predictions with
 ```python
 preds = model.predict(x)
-```
-
-## Installation
-
-**torchtuples** depends on [PyTorch](https://pytorch.org/get-started/locally/) which should be installed from [HERE](https://pytorch.org/get-started/locally/).
-
-We recommend using **python 3.7** as we have not tested the package for any previous versions.
-
-Next, **torchtuples** can be installed by cloning the repo:
-```bash
-git clone https://github.com/havakv/torchtuples.git
-cd torchtuples
-python setup.py install
 ```
