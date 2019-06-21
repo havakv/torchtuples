@@ -1,5 +1,6 @@
 # torchtuples 
 [![Build Status](https://travis-ci.org/havakv/torchtuples.svg?branch=master)](https://travis-ci.org/havakv/torchtuples)
+[![License](https://img.shields.io/badge/License-BSD%202--Clause-orange.svg)](https://github.com/havakv/torchtuples/blob/master/LICENSE)
 
 **torchtuples** is a small python package for training pytorch models.
 It works equally well for numpy arrays and torch tensors.
