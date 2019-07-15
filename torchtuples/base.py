@@ -261,14 +261,21 @@ class Model(object):
         lr_lower, lr_upper = lr_range
         path = make_name_hash('lr_finder_checkpoint')
         self.save_model_weights(path)
-        self.optimizer.drop_scheduler()
-        lr_finder = cb.LRFinder(lr_lower, lr_upper, n_steps, tolerance)
-        yield lr_finder
+        try:
+            self.optimizer.drop_scheduler()
+            lr_finder = cb.LRFinder(lr_lower, lr_upper, n_steps, tolerance)
+            yield lr_finder
+        except Exception as e:
+            self.load_model_weights(path)
+            os.remove(path)
+            self.optimizer = self.optimizer.reinitialize()
+            self._init_train_log()
+            raise e
         self.load_model_weights(path)
+        os.remove(path)
         lr = lr_finder.get_best_lr(lr_min, lr_max)
         self.optimizer = self.optimizer.reinitialize(lr=lr)
         self._init_train_log()
-        os.remove(path)
 
     def lr_finder(self, input, target, batch_size=256, lr_min=1e-4, lr_max=1., lr_range=(1e-7, 10.),
                   n_steps=100, tolerance=np.inf, callbacks=None, verbose=False, num_workers=0,
