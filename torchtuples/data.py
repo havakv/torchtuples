@@ -15,7 +15,7 @@ import torchtuples
 from torchtuples._pytorch_dataloader import _DataLoaderIterSlice
 
 
-class DataLoaderSlice(torch.utils.data.dataloader.DataLoader):
+class _DataLoaderSlice_v1_1_0(torch.utils.data.dataloader.DataLoader):
     r"""
     Like DataLoader but works on batches instead of iterating
     through the batch.
@@ -79,6 +79,38 @@ class DataLoaderSlice(torch.utils.data.dataloader.DataLoader):
     def _identity(x):
         '''Function returning x'''
         return x
+
+
+class DataLoaderSlice(torch.utils.data.dataloader.DataLoader):
+    __doc__ = ("""A hacky version to speed up pytorch's DataLoader.""" + 
+               torch.utils.data.dataloader.DataLoader.__doc__)
+    def __iter__(self):
+        self._done_init = True
+        self.collate_fn = lambda x: x
+        return super().__iter__()
+
+    @property
+    def _auto_collation(self):
+        if hasattr(self, '_done_init'):
+            return False
+        else:
+            return super()._auto_collation
+    
+    @property
+    def _index_sampler(self):
+        # The actual sampler used for generating indices for `_DatasetFetcher`
+        # (see _utils/fetch.py) to read data at each time. This would be
+        # `.batch_sampler` if in auto-collation mode, and `.sampler` otherwise.
+        # We can't change `.sampler` and `.batch_sampler` attributes for BC
+        # reasons.
+        if super()._auto_collation: # changed torchtuples
+            return self.batch_sampler
+        else:
+            return self.sampler
+
+
+if (torch.__version__ >= '1.1.0') and (torch.__version__ < '1.2.0'):
+    DataLoaderSlice = _DataLoaderSlice_v1_1_0
 
 
 class RandomSamplerContinuous(torch.utils.data.dataloader.RandomSampler):
