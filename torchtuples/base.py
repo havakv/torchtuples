@@ -243,7 +243,9 @@ class Model(object):
             verbose {bool} -- Print progress (default: {True})
             num_workers {int} -- Number of workers used in the dataloader (default: {0})
             shuffle {bool} -- If we should shuffle the order of the dataset (default: {True})
-            **kwargs are passed to 'make_dataloader' method.
+            **kwargs -- Passed to the 'make_dataloader' method. Set e.g. `torch_ds_dl to use
+                the TensorDataset and DataLoader provided by torch instead of the torchtuples
+                implementations.
     
         Returns:
             TrainingLogger -- Training log

@@ -7,78 +7,48 @@ and can potentially stop workers from shutting down at each batch.
 import warnings
 import copy
 import torch
-# from torch.utils.data.dataloader import DataLoader, RandomSampler 
-# from torch.utils.data import Dataset
 import torch.utils.data
-
 import torchtuples
-from torchtuples._pytorch_dataloader import _DataLoaderIterSlice
 
 
 class DataLoaderSlice(torch.utils.data.dataloader.DataLoader):
-    r"""
-    Like DataLoader but works on batches instead of iterating
-    through the batch.
-
-    Data loader. Combines a dataset and a sampler, and provides
-    single- or multi-process iterators over the dataset.
-
-    Arguments:
-        dataset (Dataset): dataset from which to load the data.
-        batch_size (int, optional): how many samples per batch to load
-            (default: 1).
-        shuffle (bool, optional): set to ``True`` to have the data reshuffled
-            at every epoch (default: False).
-        sampler (Sampler, optional): defines the strategy to draw samples from
-            the dataset. If specified, ``shuffle`` must be False.
-        batch_sampler (Sampler, optional): like sampler, but returns a batch of
-            indices at a time. Mutually exclusive with batch_size, shuffle,
-            sampler, and drop_last.
-        num_workers (int, optional): how many subprocesses to use for data
-            loading. 0 means that the data will be loaded in the main process.
-            (default: 0)
-        collate_fn (callable, optional): merges a list of samples to form a mini-batch.
-            If None, we simply pass the the in put to collate_fn.
-        pin_memory (bool, optional): If ``True``, the data loader will copy tensors
-            into CUDA pinned memory before returning them.
-        drop_last (bool, optional): set to ``True`` to drop the last incomplete batch,
-            if the dataset size is not divisible by the batch size. If ``False`` and
-            the size of dataset is not divisible by the batch size, then the last batch
-            will be smaller. (default: False)
-        timeout (numeric, optional): if positive, the timeout value for collecting a batch
-            from workers. Should always be non-negative. (default: 0)
-        worker_init_fn (callable, optional): If not None, this will be called on each
-            worker subprocess with the worker id (an int in ``[0, num_workers - 1]``) as
-            input, after seeding and before data loading. (default: None)
-
-    .. note:: By default, each worker will have its PyTorch seed set to
-              ``base_seed + worker_id``, where ``base_seed`` is a long generated
-              by main process using its RNG. However, seeds for other libraies
-              may be duplicated upon initializing workers (w.g., NumPy), causing
-              each worker to return identical random numbers. (See
-              :ref:`dataloader-workers-random-seed` section in FAQ.) You may
-              use ``torch.initial_seed()`` to access the PyTorch seed for each
-              worker in :attr:`worker_init_fn`, and use it to set other seeds
-              before data loading.
-
-    .. warning:: If ``spawn`` start method is used, :attr:`worker_init_fn` cannot be an
-                 unpicklable object, e.g., a lambda function.
-    """
-    def __init__(self, dataset, batch_size=1, shuffle=False, sampler=None, batch_sampler=None,
-                 num_workers=0, collate_fn=None, pin_memory=False,
-                 drop_last=False, timeout=0, worker_init_fn=None):
-        if collate_fn is None:
-            collate_fn = DataLoaderSlice._identity
-        super().__init__(dataset, batch_size, shuffle, sampler, batch_sampler, num_workers,
-                         collate_fn, pin_memory, drop_last, timeout, worker_init_fn)
-
+    __doc__ = ("""A hacky version to speed up pytorch's DataLoader.""" + 
+               torch.utils.data.dataloader.DataLoader.__doc__)
+    # This is a hack that will hopefully be removed from future implementations.
+    # The idea is to let the DataSet read a batch at a time, instead of the torch approach of
+    # reading one element in the batch at a time (with a loop). For numpy datasets this is much
+    # faster.
+    # The hack works by setting `self._auto_collation` to False as thils will cause `_MapDatasetFetcher` 
+    # to not iterate over the indices in the batch. However, we need to rewrite `self._index_sampler` so
+    # we still use a `self.batch_sampler` instead of `self.sampler` when `self._auto_collation` is False.
     def __iter__(self):
-        return _DataLoaderIterSlice(self)
+        self._done_init = True  # A flag set to change the behavior of _auto_collation
+        self.collate_fn = lambda x: x  # Identity function, because we don't want it do anything.
+        return super().__iter__()
 
-    @staticmethod
-    def _identity(x):
-        '''Function returning x'''
-        return x
+    @property
+    def _auto_collation(self):
+        if hasattr(self, '_done_init'):
+            return False  # Return false when called by __iter__
+        else:
+            return super()._auto_collation
+    
+    @property
+    def _index_sampler(self):
+        # The actual sampler used for generating indices for `_DatasetFetcher`
+        # (see _utils/fetch.py) to read data at each time. This would be
+        # `.batch_sampler` if in auto-collation mode, and `.sampler` otherwise.
+        # We can't change `.sampler` and `.batch_sampler` attributes for BC
+        # reasons.
+        if super()._auto_collation: # This will return True even if we have `self._done_init`.
+            return self.batch_sampler
+        else:
+            return self.sampler
+
+
+if (torch.__version__ >= '1.1.0') and (torch.__version__ < '1.2.0'):
+    from torchtuples import _legacy_v1_1_0
+    DataLoaderSlice = _legacy_v1_1_0.DataLoaderSlice
 
 
 class RandomSamplerContinuous(torch.utils.data.dataloader.RandomSampler):
