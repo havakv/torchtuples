@@ -84,15 +84,22 @@ class _DataLoaderSlice_v1_1_0(torch.utils.data.dataloader.DataLoader):
 class DataLoaderSlice(torch.utils.data.dataloader.DataLoader):
     __doc__ = ("""A hacky version to speed up pytorch's DataLoader.""" + 
                torch.utils.data.dataloader.DataLoader.__doc__)
+    # This is a hack that will hopefully be removed from future implementations.
+    # The idea is to let the DataSet read a batch at a time, instead of the torch approach of
+    # reading one element in the batch at a time (with a loop). For numpy datasets this is much
+    # faster.
+    # The hack works by setting `self._auto_collation` to False as thils will cause `_MapDatasetFetcher` 
+    # to not iterate over the indices in the batch. However, we need to rewrite `self._index_sampler` so
+    # we still use a `self.batch_sampler` instead of `self.sampler` when `self._auto_collation` is False.
     def __iter__(self):
-        self._done_init = True
-        self.collate_fn = lambda x: x
+        self._done_init = True  # A flag set to change the behavior of _auto_collation
+        self.collate_fn = lambda x: x  # Identity function, because we don't want it do anything.
         return super().__iter__()
 
     @property
     def _auto_collation(self):
         if hasattr(self, '_done_init'):
-            return False
+            return False  # Return false when called by __iter__
         else:
             return super()._auto_collation
     
@@ -103,7 +110,7 @@ class DataLoaderSlice(torch.utils.data.dataloader.DataLoader):
         # `.batch_sampler` if in auto-collation mode, and `.sampler` otherwise.
         # We can't change `.sampler` and `.batch_sampler` attributes for BC
         # reasons.
-        if super()._auto_collation: # changed torchtuples
+        if super()._auto_collation: # This will return True even if we have `self._done_init`.
             return self.batch_sampler
         else:
             return self.sampler

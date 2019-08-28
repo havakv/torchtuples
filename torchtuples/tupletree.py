@@ -290,7 +290,8 @@ def to_device(data, device):
         raise RuntimeError(f"Need 'data' to be tensors, not {type(data)}.")
     return data.to(device)
 
-def make_dataloader(data, batch_size, shuffle, num_workers=0, to_tensor=True, make_dataset=None):
+def make_dataloader(data, batch_size, shuffle, num_workers=0, to_tensor=True, make_dataset=None,
+                    torch_ds_dl=False):
     """Create a dataloder from tensor or np.arrays.
    
     Arguments:
@@ -303,6 +304,8 @@ def make_dataloader(data, batch_size, shuffle, num_workers=0, to_tensor=True, ma
         to_tensor {bool} -- Ensure that we use tensors (default: {True})
         make_dataset {callable} -- Function for making dataset. If 'None' we use
             DatasetTuple. (default {None}).
+        torch_ds_dl {bool} -- If `True` we TensorDataset and DataLoader from torch. If
+            `False` we use the (faster) versions from torchtuple (default {False}).
     
     Returns:
         DataLoaderSlice -- A dataloader object like the torch DataLoader
@@ -311,24 +314,15 @@ def make_dataloader(data, batch_size, shuffle, num_workers=0, to_tensor=True, ma
         data = tuplefy(data).to_tensor()
     if make_dataset is None:
         make_dataset = torchtuples.data.DatasetTuple
+        if torch_ds_dl:
+            make_dataset = torch.utils.data.TensorDataset
     # dataset = DatasetTuple(data)
-    dataset = make_dataset(data)
-    dataloader = torchtuples.data.DataLoaderSlice(dataset, batch_size, shuffle=shuffle,
-                                                  num_workers=num_workers)
+    dataset = make_dataset(*data)
+    DataLoader = torchtuples.data.DataLoaderSlice
+    if torch_ds_dl:
+        DataLoader = torch.utils.data.DataLoader
+    dataloader = DataLoader(dataset, batch_size, shuffle=shuffle, num_workers=num_workers)
     return dataloader
-
-
-## Some tests that should be written
-# a = torchtuples.Tuple((1, (2, (3, 4))))
-
-# assert a == a.tuplefy()
-# assert a == tuplefy(a)
-
-# b = [1, [2, [3, 4]]]
-
-# assert a == tuplefy(b)
-# assert a == tuplefy(b[0], b[1])
-# assert tuplefy(1) == (1,)
 
 def docstring(doc_func):
     """Decorator to make function have the docstring of 'doc_func'."""
@@ -336,6 +330,7 @@ def docstring(doc_func):
         func.__doc__ = doc_func.__doc__
         return func
     return docstring_real
+
 
 class TupleTree(tuple):
     """A tuple with some methods that works recursively.
@@ -471,8 +466,10 @@ class TupleTree(tuple):
         return to_device(self, device)
 
     @docstring(make_dataloader)
-    def make_dataloader(self, batch_size, shuffle, num_workers=0):
-        return make_dataloader(self, batch_size, shuffle, num_workers)
+    def make_dataloader(self, batch_size, shuffle, num_workers=0, to_tensor=True,
+                        make_dataset=None, torch_ds_dl=False):
+        return make_dataloader(self, batch_size, shuffle, num_workers, to_tensor,
+                               make_dataset, torch_ds_dl)
 
     @property
     def iloc(self):
