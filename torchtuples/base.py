@@ -377,7 +377,7 @@ class Model(object):
         return batch_scores
 
     def predict(self, input, batch_size=8224, numpy=None, eval_=True,
-                grads=False, to_cpu=False, num_workers=0):
+                grads=False, to_cpu=False, num_workers=0, **kwargs):
         """Get predictions from 'input'.
         
         Arguments:
@@ -392,6 +392,7 @@ class Model(object):
             to_cpu {bool} -- For larger data sets we need to move the results to cpu
                 (default: {False})
             num_workers {int} -- Number of workes in created dataloader (default: {0})
+            **kwargs -- Passed to make_dataloader.
         
         Returns:
             [TupleTree, np.ndarray or tensor] -- Predictions
@@ -399,7 +400,7 @@ class Model(object):
         if numpy is None:
             numpy = tuplefy(input).type() is not torch.Tensor
         dataloader = self.make_dataloader_predict(input, batch_size, shuffle=False,
-                                                  num_workers=num_workers)
+                                                  num_workers=num_workers, **kwargs)
         preds = self.predict_dataloader(dataloader, numpy, eval_, grads, to_cpu)
         return preds
 

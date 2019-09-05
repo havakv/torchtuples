@@ -316,6 +316,7 @@ def make_dataloader(data, batch_size, shuffle, num_workers=0, to_tensor=True, ma
         make_dataset = torchtuples.data.DatasetTuple
         if torch_ds_dl:
             make_dataset = torch.utils.data.TensorDataset
+            # make_dataset = torchtuples.data.DatasetTupleSingle
     # dataset = DatasetTuple(data)
     dataset = make_dataset(*data)
     DataLoader = torchtuples.data.DataLoaderSlice
