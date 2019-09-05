@@ -32,15 +32,15 @@ from torch import nn
 from torchtuples import Model, optim
 ```
 Make a data set with three sets of covariates `x0`, `x1` and `x2`, and a target `y`.
-The covariates are structure in a neste tuple `x`.
+The covariates are structured in a nested tuple `x`.
 ```python
 n = 500
 x0, x1, x2 = [torch.randn(n, 3) for _ in range(3)]
 y = torch.randn(n, 1)
 x = (x0, (x0, x1, x2))
 ```
-Create a simple relu net that takes as input the tensor `x_tensor` and the tuple `x_tuple`. Note that `x_tuple` is of arbitrary length. The tensors in `x_tuple` are passed through a layer `lin_tuple`, averaged, and concatenated with `x_tensor`.
-We then pass our new tensor though the layer `lin_cat`.
+Create a simple relu net that takes as input the tensor `x_tensor` and the tuple `x_tuple`. Note that `x_tuple` can be of arbitrary length. The tensors in `x_tuple` are passed through a layer `lin_tuple`, averaged, and concatenated with `x_tensor`.
+We then pass our new tensor through the layer `lin_cat`.
 ```python
 class Net(nn.Module):
     def __init__(self):
