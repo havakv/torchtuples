@@ -88,6 +88,21 @@ class DatasetTuple(torch.utils.data.Dataset):
         return lens[0]
 
 
+class DatasetTupleSingle(DatasetTuple):
+    """Like DatasetTuple, but does not read in batches and can therefore be used with
+    the regular torch.utils.data.DataLoader.
+
+    Dataset where input and target can be tuples.
+
+    Arguments:
+        input {tuple or list} -- What is passed to the network (list of x tensors.)
+        target {tuple or list} -- Label information passed to the loss function
+            (list of y tensors)
+    """
+    def __getitem__(self, index):
+        return self.data.iloc[index]
+
+
 class DatasetInputOnly:
     """Class for chaning a Dataset contraining inputs and targets
     to only return the inputs.
