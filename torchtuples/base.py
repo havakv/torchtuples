@@ -447,7 +447,7 @@ class Model(object):
                     preds_batch = preds_batch.to_device('cpu')
                 preds.append(preds_batch)
         if eval_:
-            self.net.eval()
+            self.net.train()
         preds = tuplefy(preds).cat()
         if numpy:
             preds = preds.to_numpy()
