@@ -126,8 +126,8 @@ def dataloader_input_only(dataloader):
 
     See e.g. MNIST examples code.
     """
-    if torch.__version__ == '1.1.0':
-        return _dataloader_input_only_v_1_1_0(dataloader)
+    if torch.__version__ <= '1.2.0':
+        return _dataloader_input_only_v_less_than_1_2_0(dataloader)
 
     if type(dataloader.sampler) is not torch.utils.data.sampler.SequentialSampler:
         warnings.warn("Dataloader might not be deterministic!")
@@ -139,7 +139,7 @@ def dataloader_input_only(dataloader):
                       multiprocessing_context=dl.multiprocessing_context)
     return dl_new
 
-def _dataloader_input_only_v_1_1_0(dataloader):
+def _dataloader_input_only_v_less_than_1_2_0(dataloader):
     if type(dataloader.sampler) is not torch.utils.data.sampler.SequentialSampler:
         warnings.warn("Dataloader might not be deterministic!")
     dl_new = copy.copy(dataloader)
