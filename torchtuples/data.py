@@ -11,6 +11,10 @@ import torch.utils.data
 import torchtuples
 
 
+def identity_collate_fn(x):
+    return x
+
+
 class DataLoaderSlice(torch.utils.data.dataloader.DataLoader):
     __doc__ = ("""A hacky version to speed up pytorch's DataLoader.""" + 
                torch.utils.data.dataloader.DataLoader.__doc__)
@@ -23,7 +27,8 @@ class DataLoaderSlice(torch.utils.data.dataloader.DataLoader):
     # we still use a `self.batch_sampler` instead of `self.sampler` when `self._auto_collation` is False.
     def __iter__(self):
         self._done_init = True  # A flag set to change the behavior of _auto_collation
-        self.collate_fn = lambda x: x  # Identity function, because we don't want it do anything.
+        # self.collate_fn = lambda x: x  # Identity function, because we don't want it do anything.
+        self.collate_fn = identity_collate_fn  # Identity function, because we don't want it do anything.
         return super().__iter__()
 
     @property
