@@ -23,7 +23,7 @@ requirements = [
 
 setup(
     name='torchtuples',
-    version='0.1.0',
+    version='0.1.1',
     description="Model fitting for pytorch",
     author="Haavard Kvamme",
     author_email='haavard.kvamme@gmail.com',
