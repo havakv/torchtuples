@@ -1,17 +1,18 @@
 # torchtuples 
-[![Build Status](https://travis-ci.org/havakv/torchtuples.svg?branch=master)](https://travis-ci.org/havakv/torchtuples)
+
+[![Python package](https://github.com/havakv/torchtuples/workflows/Python%20package/badge.svg)](https://github.com/havakv/torchtuples/actions)
 [![License](https://img.shields.io/badge/License-BSD%202--Clause-orange.svg)](https://github.com/havakv/torchtuples/blob/master/LICENSE)
 
-**torchtuples** is a small python package for training pytorch models.
-It works equally well for numpy arrays and torch tensors.
-One of the main benefits of **torchtuples** is that it handles data in the form of nested tuples (see example below).
+**torchtuples** is a small python package for training PyTorch models.
+It works equally well for `numpy arrays` and `torch tensors`.
+One of the main benefits of **torchtuples** is that it handles data in the form of nested tuples (see [example below](#example)).
 
 
 ## Installation
 
-**torchtuples** depends on [PyTorch](https://pytorch.org/get-started/locally/) which should be installed from [HERE](https://pytorch.org/get-started/locally/).
+Requires  **python 3.6 or 3.7**.
 
-We recommend using **python 3.7** as we have not tested the package for any previous versions.
+**torchtuples** depends on [PyTorch](https://pytorch.org/get-started/locally/) which should be installed from [HERE](https://pytorch.org/get-started/locally/).
 
 Next, **torchtuples** can be installed using pip:
 ```bash
@@ -39,7 +40,7 @@ x0, x1, x2 = [torch.randn(n, 3) for _ in range(3)]
 y = torch.randn(n, 1)
 x = (x0, (x0, x1, x2))
 ```
-Create a simple relu net that takes as input the tensor `x_tensor` and the tuple `x_tuple`. Note that `x_tuple` can be of arbitrary length. The tensors in `x_tuple` are passed through a layer `lin_tuple`, averaged, and concatenated with `x_tensor`.
+Create a simple ReLU net that takes as input the tensor `x_tensor` and the tuple `x_tuple`. Note that `x_tuple` can be of arbitrary length. The tensors in `x_tuple` are passed through a layer `lin_tuple`, averaged, and concatenated with `x_tensor`.
 We then pass our new tensor through the layer `lin_cat`.
 ```python
 class Net(nn.Module):
