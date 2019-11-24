@@ -24,7 +24,7 @@ requirements = [
 setup(
     name='torchtuples',
     version='0.1.1',
-    description="Model fitting for pytorch",
+    description="Training neural networks in PyTorch",
     author="Haavard Kvamme",
     author_email='haavard.kvamme@gmail.com',
     url='https://github.com/havakv/torchtuples',
@@ -39,6 +39,7 @@ setup(
         'Intended Audience :: Developers',
         'License :: OSI Approved :: BSD License',
         'Natural Language :: English',
+        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
     ],
     python_requires='>=3.6'
