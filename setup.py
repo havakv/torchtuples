@@ -6,6 +6,9 @@
 from setuptools import setup, find_packages
 
 
+with open('README.md', 'r') as readme_file:
+    readme = readme_file.read()
+
 requirements = [
     'numpy>=1.15.4',
     'pandas>=0.24.2',
@@ -18,6 +21,8 @@ setup(
     name='torchtuples',
     version='0.1.1',
     description="Training neural networks in PyTorch",
+    long_description=readme,
+    long_description_content_type='text/markdown',
     author="Haavard Kvamme",
     author_email='haavard.kvamme@gmail.com',
     url='https://github.com/havakv/torchtuples',
@@ -32,8 +37,8 @@ setup(
         'Intended Audience :: Developers',
         'License :: OSI Approved :: BSD License',
         'Natural Language :: English',
-        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.6',
     ],
     python_requires='>=3.6'
 )

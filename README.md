@@ -1,6 +1,8 @@
 # torchtuples 
 
 [![Python package](https://github.com/havakv/torchtuples/workflows/Python%20package/badge.svg)](https://github.com/havakv/torchtuples/actions)
+[![PyPI](https://img.shields.io/pypi/v/torchtuples.svg)](https://pypi.org/project/torchtuples/)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/torchtuples.svg)
 [![License](https://img.shields.io/badge/License-BSD%202--Clause-orange.svg)](https://github.com/havakv/torchtuples/blob/master/LICENSE)
 
 **torchtuples** is a small python package for training PyTorch models.
