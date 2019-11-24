@@ -19,7 +19,7 @@ requirements = [
 
 setup(
     name='torchtuples',
-    version='0.1.1',
+    version='0.1.2',
     description="Training neural networks in PyTorch",
     long_description=readme,
     long_description_content_type='text/markdown',
