@@ -12,11 +12,13 @@ One of the main benefits of **torchtuples** is that it handles data in the form 
 
 ## Installation
 
-Requires  **python 3.6 or 3.7**.
-
 **torchtuples** depends on [PyTorch](https://pytorch.org/get-started/locally/) which should be installed from [HERE](https://pytorch.org/get-started/locally/).
 
-Next, **torchtuples** can be installed using pip:
+Next, **torchtuples** can be installed with pip:
+```bash
+pip install torchtuples
+```
+For the bleeding edge version, install directly from github (consider adding `--force-reinstall`):
 ```bash
 pip install git+git://github.com/havakv/torchtuples.git
 ```
@@ -68,3 +70,4 @@ and make predictions with
 ```python
 preds = model.predict(x)
 ```
+For more examples, see the [examples folder](https://github.com/havakv/torchtuples/tree/master/examples).
