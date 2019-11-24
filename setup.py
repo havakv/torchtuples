@@ -5,13 +5,6 @@
 
 from setuptools import setup, find_packages
 
-try:
-    import torch
-    if torch.__version__ < '1.1.0':
-        raise ImportError("""Need a torch version that is at least '1.1.0'""")
-except ModuleNotFoundError:
-    raise ModuleNotFoundError("""You need to install pytorch! See https://pytorch.org/get-started/locally/""")
-
 
 requirements = [
     'numpy>=1.15.4',
