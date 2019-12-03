@@ -58,11 +58,10 @@ class Model(object):
         self.optimizer = optimizer if optimizer is not None else AdamW
         self.device = self._device_from__init__(device)
         self.net.to(self.device)
-        # self.net_predict = net_predict if net_predict else self.net
-        # self.net_predict.to(self.device)
         if not hasattr(self, 'make_dataloader_predict'):
             self.make_dataloader_predict = self.make_dataloader
         self._init_train_log()
+        self.metrics = self._setup_metrics()
 
     def _init_train_log(self):
         self.log = cb.TrainingLogger()
@@ -127,11 +126,14 @@ class Model(object):
         def _tuple_info(tuple_):
             tuple_ = tuplefy(tuple_)
             return {'levels': tuple_.to_levels(), 'shapes': tuple_.shapes().apply(lambda x: x[1:])}
-        # input, target = dataloader.dataset[0]
         data = _get_element_in_dataloader(dataloader)
         if data is not None:
-            input, target = data
-            self.fit_info['input'] = _tuple_info(input)
+            if len(data) == 2:
+                try:
+                    input, target = data
+                    self.fit_info['input'] = _tuple_info(input)
+                except:
+                    pass
     
     def _to_device(self, data):
         """Move data to self.device.
@@ -146,7 +148,7 @@ class Model(object):
             return tuplefy(data)
         return tuplefy(data).to_device(self.device)
 
-    def compute_metrics(self, input, target, metrics):
+    def compute_metrics(self, data, metrics):
         """Function for computing loss.
         Is rather general, but can be reimpliemented by sub classes.
         
@@ -159,7 +161,9 @@ class Model(object):
             tensor -- Results of self.loss()
         """
         if (self.loss is None) and (self.loss in metrics.values()):
-            raise RuntimeError(f"Need to specify a loss (self.loss). It's currently None")
+            raise RuntimeError(f"Need to specify a loss (self.loss). It's currently `None`")
+
+        input, target = data
         input = self._to_device(input)
         target = self._to_device(target)
         out = self.net(*input)
@@ -167,7 +171,7 @@ class Model(object):
         res = {name: metric(*out, *target) for name, metric in metrics.items()}
         return res
 
-    def _setup_metrics(self, metrics):
+    def _setup_metrics(self, metrics=None):
         all_metrics = {'loss': self.loss}
         if metrics is not None:
             if not hasattr(metrics, 'items'):
@@ -210,11 +214,11 @@ class Model(object):
             if stop: break
             stop = self.callbacks.on_epoch_start()
             if stop: break
-            for input, target in dataloader:
+            for data in dataloader:
                 stop = self.callbacks.on_batch_start()
                 if stop: break
                 self.optimizer.zero_grad()
-                self.batch_metrics = self.compute_metrics(input, target, self.metrics)
+                self.batch_metrics = self.compute_metrics(data, self.metrics)
                 self.batch_loss = self.batch_metrics['loss']
                 self.batch_loss.backward()
                 stop = self.callbacks.before_step()
@@ -227,7 +231,7 @@ class Model(object):
         self.callbacks.on_fit_end()
         return self.log
 
-    def fit(self, input, target, batch_size=256, epochs=1, callbacks=None, verbose=True,
+    def fit(self, input, target=None, batch_size=256, epochs=1, callbacks=None, verbose=True,
             num_workers=0, shuffle=True, metrics=None, val_data=None, val_batch_size=8224,
             **kwargs):
         """Fit  model with inputs and targets.
@@ -250,9 +254,11 @@ class Model(object):
         Returns:
             TrainingLogger -- Training log
         """
-        dataloader = self.make_dataloader((input, target), batch_size, shuffle, num_workers, **kwargs)
+        if target is not None:
+            input = (input, target)
+        dataloader = self.make_dataloader(input, batch_size, shuffle, num_workers, **kwargs)
         val_dataloader = val_data
-        if type(val_data) in (list, tuple, TupleTree):
+        if (is_dl(val_data) is False) and (val_data is not None):
             val_dataloader = self.make_dataloader(val_data, val_batch_size, shuffle=False,
                                                   num_workers=num_workers, **kwargs)
         log = self.fit_dataloader(dataloader, epochs, callbacks, verbose, metrics, val_dataloader)
@@ -301,7 +307,7 @@ class Model(object):
             self.fit_dataloader(dataloader, epochs, callbacks, verbose)
         return lr_finder
 
-    def score_in_batches(self, data, score_func=None, batch_size=8224, eval_=True, mean=True,
+    def score_in_batches(self, input, target=None, score_func=None, batch_size=8224, eval_=True, mean=True,
                          num_workers=0, shuffle=False, make_dataloader=None, numpy=True, **kwargs):
         """Used to score a dataset in batches.
         If score_func is None, this use the loss function.
@@ -330,9 +336,10 @@ class Model(object):
                 make_dataloader = self.make_dataloader
             else:
                 make_dataloader = self.make_dataloader_predict
-        if data.__class__ in (list, tuple, TupleTree):
-            data = make_dataloader(data, batch_size, shuffle, num_workers, **kwargs)
-        scores = self.score_in_batches_dataloader(data, score_func, eval_, mean, numpy)
+        if target is not None:
+            input = (input, target)
+        dl = make_dataloader(input, batch_size, shuffle, num_workers, **kwargs)
+        scores = self.score_in_batches_dataloader(dl, score_func, eval_, mean, numpy)
         return scores
     
     def score_in_batches_dataloader(self, dataloader, score_func=None, eval_=True, mean=True, numpy=True):
@@ -349,12 +356,12 @@ class Model(object):
             self.net.eval()
         batch_scores = []
         with torch.no_grad():
-            for input, target in dataloader:
+            for data in dataloader:
                 if score_func is None:
-                    # score = self.compute_loss(input, target)
-                    score = self.compute_metrics(input, target, self.metrics)
+                    score = self.compute_metrics(data, self.metrics)
                 else:
                     warnings.warn(f"score_func {score_func} probably doesn't work... Not implemented")
+                    input, target = data
                     score = score_func(self, input, target)
                 batch_scores.append(score)
         if eval_:
@@ -368,7 +375,6 @@ class Model(object):
             if mean:
                 scores = {name: score.mean() for name, score in scores.items()}
             if numpy:
-                # scores = {name: tuplefy(score).to_numpy()[0] for name, score in scores.items()}
                 scores = {name: score.item() for name, score in scores.items()}
             return scores
         if mean:
@@ -376,7 +382,11 @@ class Model(object):
             return np.mean(batch_scores)
         return batch_scores
 
-    def _predict_fun_dl(self, fun, dataloader, numpy=False, eval_=True, grads=False, to_cpu=False):
+    def _predict_func_dl(self, func, dataloader, numpy=False, eval_=True, grads=False, to_cpu=False):
+        """Get predictions from `dataloader`.
+        `func` can be anything and is not concatenated to `self.net` or `self.net.predict`.
+        This is different from `predict` and `predict_net` which both use call `self.net`.
+        """
         if hasattr(self, 'fit_info') and (self.make_dataloader is self.make_dataloader_predict):
             data = _get_element_in_dataloader(dataloader)
             if data is not None:
@@ -396,7 +406,7 @@ class Model(object):
             preds = []
             for input in dataloader:
                 input = tuplefy(input).to_device(self.device)
-                preds_batch = tuplefy(fun(*input))
+                preds_batch = tuplefy(func(*input))
                 if numpy or to_cpu:
                     preds_batch = preds_batch.to_device('cpu')
                 preds.append(preds_batch)
@@ -409,26 +419,27 @@ class Model(object):
             preds = preds[0]
         return preds
 
-    def _predict_fun(self, fun, input, batch_size=8224, numpy=None, eval_=True, grads=False, to_cpu=False,
+    def _predict_func(self, func, input, batch_size=8224, numpy=None, eval_=True, grads=False, to_cpu=False,
                      num_workers=0, is_dataloader=None, **kwargs):
         """Get predictions from `input` which can be data or a DataLoader.
-        `fun` can be anything and is not concatenated to `self.net` or `self.net.predict`.
+        `func` can be anything and is not concatenated to `self.net` or `self.net.predict`.
+        This is different from `predict` and `predict_net` which both use call `self.net`.
         """
-        if (is_data(input) is True) or (is_dataloader is False):
+        if is_data(input) or (is_dataloader is False):
             dl = self.make_dataloader_predict(input, batch_size, shuffle=False,
                                               num_workers=num_workers, **kwargs)
-        elif (is_dl(input) is True) or (is_dataloader is True):
+        elif is_dl(input) or (is_dataloader is True):
             dl = input
         else:
             raise ValueError("Did not recognize data type. You can set `is_dataloader to `Ture`" +
                              + " or `False` to force usage.")
 
         to_cpu = numpy or to_cpu
-        preds = self._predict_fun_dl(fun, dl, numpy, eval_, grads, to_cpu)
+        preds = self._predict_func_dl(func, dl, numpy, eval_, grads, to_cpu)
         return array_or_tensor(preds, numpy, input)
 
     def predict_net(self, input, batch_size=8224, numpy=None, eval_=True, grads=False, to_cpu=False,
-                num_workers=0, is_dataloader=None, fun=None, **kwargs):
+                num_workers=0, is_dataloader=None, func=None, **kwargs):
         """Get predictions from 'input' using the `self.net(x)` method.
         Use `predict` instead if you want to use `self.net.predict(x)`.
         
@@ -444,18 +455,20 @@ class Model(object):
             to_cpu {bool} -- For larger data sets we need to move the results to cpu
                 (default: {False})
             num_workers {int} -- Number of workes in created dataloader (default: {0})
+            func {func} -- A toch function, such as `torch.sigmoid` which is called after the predict.
+                (default: {None})
             **kwargs -- Passed to make_dataloader.
         
         Returns:
             [TupleTree, np.ndarray or tensor] -- Predictions
         """
-        pred_fun = wrapfun(fun, self.net)
-        preds = self._predict_fun(pred_fun, input, batch_size, numpy, eval_, grads, to_cpu, num_workers,
+        pred_func = wrapfunc(func, self.net)
+        preds = self._predict_func(pred_func, input, batch_size, numpy, eval_, grads, to_cpu, num_workers,
                                   is_dataloader, **kwargs)
         return array_or_tensor(preds, numpy, input)
 
     def predict(self, input, batch_size=8224, numpy=None, eval_=True, grads=False, to_cpu=False,
-                num_workers=0, is_dataloader=None, fun=None, **kwargs):
+                num_workers=0, is_dataloader=None, func=None, **kwargs):
         """Get predictions from 'input' using the `self.net.predict(x)` method.
         Use `predict_net` instead if you want to use `self.net(x)`.
         
@@ -471,6 +484,8 @@ class Model(object):
             to_cpu {bool} -- For larger data sets we need to move the results to cpu
                 (default: {False})
             num_workers {int} -- Number of workes in created dataloader (default: {0})
+            func {func} -- A toch function, such as `torch.sigmoid` which is called after the predict.
+                (default: {None})
             **kwargs -- Passed to make_dataloader.
         
         Returns:
@@ -478,64 +493,12 @@ class Model(object):
         """
         if not hasattr(self.net, 'predict'):
             return self.predict_net(input, batch_size, numpy, eval_, grads, to_cpu, num_workers,
-                                    is_dataloader, fun, **kwargs)
+                                    is_dataloader, func, **kwargs)
 
-        pred_fun = wrapfun(fun, self.net.predict)
-        preds = self._predict_fun(pred_fun, input, batch_size, numpy, eval_, grads, to_cpu, num_workers,
+        pred_func = wrapfunc(func, self.net.predict)
+        preds = self._predict_func(pred_func, input, batch_size, numpy, eval_, grads, to_cpu, num_workers,
                                   is_dataloader, **kwargs)
         return array_or_tensor(preds, numpy, input)
-
-
-    # def predict_dataloader(self, dataloader, numpy=True, eval_=True, grads=False, to_cpu=False):
-    #     """Get predictions from dataloader.
-        
-    #     Arguments:
-    #         dataloader {DataLoader} -- Dataloader with inputs to net.
-        
-    #     Keyword Arguments:
-    #         numpy {bool} -- If 'False', tensor is returned (default: {True})
-    #         eval_ {bool} -- If 'True', use 'eval' modede on net. (default: {True})
-    #         grads {bool} -- If gradients should be computed (default: {False})
-    #         to_cpu {bool} -- For larger data sets we need to move the results to cpu
-    #             (default: {False})
-        
-    #     Returns:
-    #         [TupleTree, np.ndarray or tensor] -- Predictions
-    #     """
-    #     if hasattr(self, 'fit_info') and (self.make_dataloader is self.make_dataloader_predict):
-    #         # input = tuplefy(dataloader.dataset[0])
-    #         data = _get_element_in_dataloader(dataloader)
-    #         if data is not None:
-    #             input = tuplefy(data)
-    #             input_train = self.fit_info['input']
-    #             if input.to_levels() != input_train['levels']:
-    #                 raise RuntimeError("""The input from the dataloader is different from
-    #                 the 'input' during trainig. Make sure to remove 'target' from dataloader.
-    #                 Can be done with 'torchtuples.data.dataloader_input_only'.""")
-    #             if input.shapes().apply(lambda x: x[1:]) != input_train['shapes']:
-    #                 raise RuntimeError("""The input from the dataloader is different from
-    #                 the 'input' during trainig. The shapes are different.""")
-
-    #     if not eval_:
-    #         warnings.warn("We still don't shuffle the data here... event though 'eval_' is True.")
-    #     if eval_:
-    #         self.net.eval()
-    #     with torch.set_grad_enabled(grads):
-    #         preds = []
-    #         for input in dataloader:
-    #             input = tuplefy(input).to_device(self.device)
-    #             preds_batch = tuplefy(self.net(*input))
-    #             if numpy or to_cpu:
-    #                 preds_batch = preds_batch.to_device('cpu')
-    #             preds.append(preds_batch)
-    #     if eval_:
-    #         self.net.train()
-    #     preds = tuplefy(preds).cat()
-    #     if numpy:
-    #         preds = preds.to_numpy()
-    #     if len(preds) == 1:
-    #         preds = preds[0]
-    #     return preds
 
     def save_model_weights(self, path, **kwargs):
         '''Save the model weights.
@@ -582,6 +545,7 @@ class Model(object):
             self.net.to(self.device)
         return self.net
 
+
 def _get_element_in_dataloader(dataloader):
     dataset = dataloader.dataset
     try:
@@ -598,9 +562,8 @@ def _get_element_in_dataloader(dataloader):
         pass
     return None
 
-
-def wrapfun(outer, inner):
-    """Essentially returns the functino `lambda x: outer(inner(x))`
+def wrapfunc(outer, inner):
+    """Essentially returns the function `lambda x: outer(inner(x))`
     If `outer` is None, return `inner`.
     """
     if outer is None:
