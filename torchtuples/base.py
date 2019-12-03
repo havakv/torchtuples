@@ -12,7 +12,7 @@ import torch
 import torchtuples.callbacks as cb
 from torchtuples.optim import AdamW, OptimWrap
 from torchtuples.tupletree import tuplefy, TupleTree, make_dataloader
-from torchtuples.utils import make_name_hash
+from torchtuples.utils import make_name_hash, array_or_tensor, is_data, is_dl
 
 
 class Model(object):
@@ -376,12 +376,64 @@ class Model(object):
             return np.mean(batch_scores)
         return batch_scores
 
-    def predict(self, input, batch_size=8224, numpy=None, eval_=True,
-                grads=False, to_cpu=False, num_workers=0, **kwargs):
-        """Get predictions from 'input'.
+    def _predict_fun_dl(self, fun, dataloader, numpy=False, eval_=True, grads=False, to_cpu=False):
+        if hasattr(self, 'fit_info') and (self.make_dataloader is self.make_dataloader_predict):
+            data = _get_element_in_dataloader(dataloader)
+            if data is not None:
+                input = tuplefy(data)
+                input_train = self.fit_info['input']
+                if input.to_levels() != input_train['levels']:
+                    warnings.warn("""The input from the dataloader is different from
+                    the 'input' during trainig. Make sure to remove 'target' from dataloader.
+                    Can be done with 'torchtuples.data.dataloader_input_only'.""")
+                if input.shapes().apply(lambda x: x[1:]) != input_train['shapes']:
+                    warnings.warn("""The input from the dataloader is different from
+                    the 'input' during trainig. The shapes are different.""")
+
+        if eval_:
+            self.net.eval()
+        with torch.set_grad_enabled(grads):
+            preds = []
+            for input in dataloader:
+                input = tuplefy(input).to_device(self.device)
+                preds_batch = tuplefy(fun(*input))
+                if numpy or to_cpu:
+                    preds_batch = preds_batch.to_device('cpu')
+                preds.append(preds_batch)
+        if eval_:
+            self.net.train()
+        preds = tuplefy(preds).cat()
+        if numpy:
+            preds = preds.to_numpy()
+        if len(preds) == 1:
+            preds = preds[0]
+        return preds
+
+    def _predict_fun(self, fun, input, batch_size=8224, numpy=None, eval_=True, grads=False, to_cpu=False,
+                     num_workers=0, is_dataloader=None, **kwargs):
+        """Get predictions from `input` which can be data or a DataLoader.
+        `fun` can be anything and is not concatenated to `self.net` or `self.net.predict`.
+        """
+        if (is_data(input) is True) or (is_dataloader is False):
+            dl = self.make_dataloader_predict(input, batch_size, shuffle=False,
+                                              num_workers=num_workers, **kwargs)
+        elif (is_dl(input) is True) or (is_dataloader is True):
+            dl = input
+        else:
+            raise ValueError("Did not recognize data type. You can set `is_dataloader to `Ture`" +
+                             + " or `False` to force usage.")
+
+        to_cpu = numpy or to_cpu
+        preds = self._predict_fun_dl(fun, dl, numpy, eval_, grads, to_cpu)
+        return array_or_tensor(preds, numpy, input)
+
+    def predict_net(self, input, batch_size=8224, numpy=None, eval_=True, grads=False, to_cpu=False,
+                num_workers=0, is_dataloader=None, fun=None, **kwargs):
+        """Get predictions from 'input' using the `self.net(x)` method.
+        Use `predict` instead if you want to use `self.net.predict(x)`.
         
         Arguments:
-            input {tuple, np.ndarra, or torch.tensor} -- Input to net.
+            input {dataloader, tuple, np.ndarra, or torch.tensor} -- Input to net.
         
         Keyword Arguments:
             batch_size {int} -- Batch size (default: {8224})
@@ -397,63 +449,93 @@ class Model(object):
         Returns:
             [TupleTree, np.ndarray or tensor] -- Predictions
         """
-        if numpy is None:
-            numpy = tuplefy(input).type() is not torch.Tensor
-        dataloader = self.make_dataloader_predict(input, batch_size, shuffle=False,
-                                                  num_workers=num_workers, **kwargs)
-        preds = self.predict_dataloader(dataloader, numpy, eval_, grads, to_cpu)
-        return preds
+        pred_fun = wrapfun(fun, self.net)
+        preds = self._predict_fun(pred_fun, input, batch_size, numpy, eval_, grads, to_cpu, num_workers,
+                                  is_dataloader, **kwargs)
+        return array_or_tensor(preds, numpy, input)
 
-    def predict_dataloader(self, dataloader, numpy=True, eval_=True, grads=False, to_cpu=False):
-        """Get predictions from dataloader.
+    def predict(self, input, batch_size=8224, numpy=None, eval_=True, grads=False, to_cpu=False,
+                num_workers=0, is_dataloader=None, fun=None, **kwargs):
+        """Get predictions from 'input' using the `self.net.predict(x)` method.
+        Use `predict_net` instead if you want to use `self.net(x)`.
         
         Arguments:
-            dataloader {DataLoader} -- Dataloader with inputs to net.
+            input {dataloader, tuple, np.ndarra, or torch.tensor} -- Input to net.
         
         Keyword Arguments:
-            numpy {bool} -- If 'False', tensor is returned (default: {True})
+            batch_size {int} -- Batch size (default: {8224})
+            numpy {bool} -- 'False' gives tensor, 'True' gives numpy, and None give same as input
+                (default: {None})
             eval_ {bool} -- If 'True', use 'eval' modede on net. (default: {True})
             grads {bool} -- If gradients should be computed (default: {False})
             to_cpu {bool} -- For larger data sets we need to move the results to cpu
                 (default: {False})
+            num_workers {int} -- Number of workes in created dataloader (default: {0})
+            **kwargs -- Passed to make_dataloader.
         
         Returns:
             [TupleTree, np.ndarray or tensor] -- Predictions
         """
-        if hasattr(self, 'fit_info') and (self.make_dataloader is self.make_dataloader_predict):
-            # input = tuplefy(dataloader.dataset[0])
-            data = _get_element_in_dataloader(dataloader)
-            if data is not None:
-                input = tuplefy(data)
-                input_train = self.fit_info['input']
-                if input.to_levels() != input_train['levels']:
-                    raise RuntimeError("""The input from the dataloader is different from
-                    the 'input' during trainig. Make sure to remove 'target' from dataloader.
-                    Can be done with 'torchtuples.data.dataloader_input_only'.""")
-                if input.shapes().apply(lambda x: x[1:]) != input_train['shapes']:
-                    raise RuntimeError("""The input from the dataloader is different from
-                    the 'input' during trainig. The shapes are different.""")
+        if not hasattr(self.net, 'predict'):
+            return self.predict_net(input, batch_size, numpy, eval_, grads, to_cpu, num_workers,
+                                    is_dataloader, fun, **kwargs)
 
-        if not eval_:
-            warnings.warn("We still don't shuffle the data here... event though 'eval_' is True.")
-        if eval_:
-            self.net.eval()
-        with torch.set_grad_enabled(grads):
-            preds = []
-            for input in dataloader:
-                input = tuplefy(input).to_device(self.device)
-                preds_batch = tuplefy(self.net(*input))
-                if numpy or to_cpu:
-                    preds_batch = preds_batch.to_device('cpu')
-                preds.append(preds_batch)
-        if eval_:
-            self.net.train()
-        preds = tuplefy(preds).cat()
-        if numpy:
-            preds = preds.to_numpy()
-        if len(preds) == 1:
-            preds = preds[0]
-        return preds
+        pred_fun = wrapfun(fun, self.net.predict)
+        preds = self._predict_fun(pred_fun, input, batch_size, numpy, eval_, grads, to_cpu, num_workers,
+                                  is_dataloader, **kwargs)
+        return array_or_tensor(preds, numpy, input)
+
+
+    # def predict_dataloader(self, dataloader, numpy=True, eval_=True, grads=False, to_cpu=False):
+    #     """Get predictions from dataloader.
+        
+    #     Arguments:
+    #         dataloader {DataLoader} -- Dataloader with inputs to net.
+        
+    #     Keyword Arguments:
+    #         numpy {bool} -- If 'False', tensor is returned (default: {True})
+    #         eval_ {bool} -- If 'True', use 'eval' modede on net. (default: {True})
+    #         grads {bool} -- If gradients should be computed (default: {False})
+    #         to_cpu {bool} -- For larger data sets we need to move the results to cpu
+    #             (default: {False})
+        
+    #     Returns:
+    #         [TupleTree, np.ndarray or tensor] -- Predictions
+    #     """
+    #     if hasattr(self, 'fit_info') and (self.make_dataloader is self.make_dataloader_predict):
+    #         # input = tuplefy(dataloader.dataset[0])
+    #         data = _get_element_in_dataloader(dataloader)
+    #         if data is not None:
+    #             input = tuplefy(data)
+    #             input_train = self.fit_info['input']
+    #             if input.to_levels() != input_train['levels']:
+    #                 raise RuntimeError("""The input from the dataloader is different from
+    #                 the 'input' during trainig. Make sure to remove 'target' from dataloader.
+    #                 Can be done with 'torchtuples.data.dataloader_input_only'.""")
+    #             if input.shapes().apply(lambda x: x[1:]) != input_train['shapes']:
+    #                 raise RuntimeError("""The input from the dataloader is different from
+    #                 the 'input' during trainig. The shapes are different.""")
+
+    #     if not eval_:
+    #         warnings.warn("We still don't shuffle the data here... event though 'eval_' is True.")
+    #     if eval_:
+    #         self.net.eval()
+    #     with torch.set_grad_enabled(grads):
+    #         preds = []
+    #         for input in dataloader:
+    #             input = tuplefy(input).to_device(self.device)
+    #             preds_batch = tuplefy(self.net(*input))
+    #             if numpy or to_cpu:
+    #                 preds_batch = preds_batch.to_device('cpu')
+    #             preds.append(preds_batch)
+    #     if eval_:
+    #         self.net.train()
+    #     preds = tuplefy(preds).cat()
+    #     if numpy:
+    #         preds = preds.to_numpy()
+    #     if len(preds) == 1:
+    #         preds = preds[0]
+    #     return preds
 
     def save_model_weights(self, path, **kwargs):
         '''Save the model weights.
@@ -515,3 +597,14 @@ def _get_element_in_dataloader(dataloader):
     except:
         pass
     return None
+
+
+def wrapfun(outer, inner):
+    """Essentially returns the functino `lambda x: outer(inner(x))`
+    If `outer` is None, return `inner`.
+    """
+    if outer is None:
+        return inner
+    def newfun(*args, **kwargs):
+        return outer(inner(*args, **kwargs))
+    return newfun
