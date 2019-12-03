@@ -133,7 +133,7 @@ def tensor_to_numpy(data):
         data = data.detach()
     if type(data) is torch.Size:
         return np.array(data)
-    return data.numpy()
+    return data.cpu().numpy()
 
 @apply_leaf
 def astype(data, dtype, *args, **kwargs):
