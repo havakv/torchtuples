@@ -56,8 +56,7 @@ class Model(object):
             self.load_net(self.net)
         self.loss = loss
         self.optimizer = optimizer if optimizer is not None else AdamW
-        self.device = self._device_from__init__(device)
-        self.net.to(self.device)
+        self.set_device(device)
         if not hasattr(self, 'make_dataloader_predict'):
             self.make_dataloader_predict = self.make_dataloader
         self._init_train_log()
@@ -69,9 +68,22 @@ class Model(object):
         self.val_metrics = cb.MonitorFitMetrics()
         self.log.monitors = OrderedDict(train_=self.train_metrics, val_=self.val_metrics)
         self.callbacks = None
-    
-    @staticmethod
-    def _device_from__init__(device):
+
+    @property
+    def device(self):
+        return self._device
+
+    def set_device(self, device):
+        """Set the device used by the model.
+        This is called in the __init__ function, but can be used to later change the device.
+
+        Arguments:
+            device {str, int, torch.device} -- Device to compute on. (default: {None})
+                Preferrably pass a torch.device object.
+                If 'None': use default gpu if avaiable, else use cpu.
+                If 'int': used that gpu: torch.device('cuda:<device>').
+                If 'string': string is passed to torch.device('string').
+        """
         if device is None:
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         elif type(device) is str:
@@ -79,8 +91,10 @@ class Model(object):
         elif type(device) is int:
             device = torch.device(f"cuda:{device}")
         if type(device) is not torch.device:
-            raise ValueError("Argument 'device' needs to be None, string, int or torch.device object.")
-        return device
+            raise ValueError("Argument `device` needs to be `None`, `string`, `int`, or `torch.device`," +
+                             f" got {type(device)}")
+        self._device = device
+        self.net.to(self.device)
     
     @property
     def optimizer(self):
