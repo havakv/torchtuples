@@ -15,7 +15,7 @@ def identity_collate_fn(x):
     return x
 
 
-class DataLoaderSlice(torch.utils.data.dataloader.DataLoader):
+class DataLoaderBatch(torch.utils.data.dataloader.DataLoader):
     __doc__ = ("""A hacky version to speed up pytorch's DataLoader.""" + 
                torch.utils.data.dataloader.DataLoader.__doc__)
     # This is a hack that will hopefully be removed from future implementations.
@@ -53,7 +53,13 @@ class DataLoaderSlice(torch.utils.data.dataloader.DataLoader):
 
 if (torch.__version__ >= '1.1.0') and (torch.__version__ < '1.2.0'):
     from torchtuples import _legacy_v1_1_0
-    DataLoaderSlice = _legacy_v1_1_0.DataLoaderSlice
+    DataLoaderBatch = _legacy_v1_1_0.DataLoaderSlice
+
+
+class DataLoaderSlice(DataLoaderBatch):
+    def __init__(self, *args, **kwargs):
+        warnings.warn("Use `DataLoaderBatch` instead. `DataLoaderSlice` will be removed", DeprecationWarning)
+        super().__init__(*args, **kwargs)
 
 
 class RandomSamplerContinuous(torch.utils.data.dataloader.RandomSampler):
