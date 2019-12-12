@@ -130,7 +130,7 @@ class Model(object):
             **kwargs -- Passed to make_dataloader.
 
         Returns:
-            DataLoaderSlice -- A dataloader object like the torch DataLoader
+            DataLoaderBatch -- A dataloader object like the torch DataLoader
         """
         dataloader = make_dataloader(data, batch_size, shuffle, num_workers, **kwargs)
         return dataloader
