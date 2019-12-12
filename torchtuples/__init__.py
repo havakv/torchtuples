@@ -23,3 +23,5 @@ import torchtuples.practical
 import torchtuples.optim
 
 from torchtuples.base import Model
+
+cb = torchtuples.callbacks
