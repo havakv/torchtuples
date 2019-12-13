@@ -7,7 +7,8 @@ import random
 from collections import OrderedDict, defaultdict
 import warnings
 import contextlib
-import numpy as np  # shoul be remved
+from typing import Dict
+import numpy as np
 import torch
 import torchtuples.callbacks as cb
 from torchtuples.optim import AdamW, OptimWrap
@@ -149,41 +150,34 @@ class Model(object):
                 except:
                     pass
     
-    def _to_device(self, data):
-        """Move data to self.device.
-        
-        Arguments:
-            data {tensor or tuple} -- Data
-        
-        Returns:
-            tensor or tuple -- Data moved to device.
+    def _to_device(self, data) -> TupleTree:
+        """Move `data` to self.device.
+        If `data` is a tensor, it will be returned as a `TupleTree`.
         """
         if data is None:
             return tuplefy(data)
         return tuplefy(data).to_device(self.device)
 
-    def compute_metrics(self, data, metrics):
-        """Function for computing loss.
-        Is rather general, but can be reimpliemented by sub classes.
+    def compute_metrics(self, data, metrics=None) -> Dict[str, torch.Tensor]:
+        """Function for computing the loss and other metrics.
         
         Arguments:
-            input {tensor or tuple} -- This should be passed to self.net.
-            target {tensor or tuple} -- This is the targets that should be used in self.loss.
-            metrics (dictionary with funcs) -- Metrics that should be computed.
+            data {tensor or tuple} -- A batch of data. Typically the tuple `(input, target)`.
 
-        Returns:
-            tensor -- Results of self.loss()
+        Keyword Arguments:
+            metrics {dict} -- A dictionary with metrics. If `None` use `self.metrics`. (default: {None})
         """
+        if metrics is None:
+            metrics = self.metrics
         if (self.loss is None) and (self.loss in metrics.values()):
-            raise RuntimeError(f"Need to specify a loss (self.loss). It's currently `None`")
+            raise RuntimeError(f"Need to set `self.loss`.")
 
         input, target = data
         input = self._to_device(input)
         target = self._to_device(target)
         out = self.net(*input)
         out = tuplefy(out)
-        res = {name: metric(*out, *target) for name, metric in metrics.items()}
-        return res
+        return {name: metric(*out, *target) for name, metric in metrics.items()}
 
     def _setup_metrics(self, metrics=None):
         all_metrics = {'loss': self.loss}
