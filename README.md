@@ -59,6 +59,10 @@ class Net(nn.Module):
         x = torch.stack(x).mean(0)
         x = torch.cat([x, x_tensor], dim=1)
         return self.lin_cat(x)
+
+    def predict(self, x_tensor, x_tuple):
+        x = self.forward(x_tensor, x_tuple)
+        return torch.sigmoid(x)
 ```
 
 We can now fit the model with
@@ -66,8 +70,13 @@ We can now fit the model with
 model = Model(Net(), nn.MSELoss(), optim.SGD(0.01))
 log = model.fit(x, y, batch_size=64, epochs=5)
 ```
-and make predictions with
+and make predictions with either the `Net.predict` method
 ```python
 preds = model.predict(x)
 ```
+or with the `Net.forward` method
+```python
+preds = model.predict_net(x)
+```
+
 For more examples, see the [examples folder](https://github.com/havakv/torchtuples/tree/master/examples).

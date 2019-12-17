@@ -22,8 +22,16 @@ def test_readme_example():
             x = torch.stack(x).mean(0)
             x = torch.cat([x, x_tensor], dim=1)
             return self.lin_cat(x)
+
+        def predict(self, x_tensor, x_tuple):
+            x = self.forward(x_tensor, x_tuple)
+            return torch.sigmoid(x)
     
+
     model = Model(Net(), nn.MSELoss(), optim.SGD(0.01))
     log = model.fit(x, y, batch_size=64, epochs=5, verbose=False)
     preds = model.predict(x)
     assert preds is not None
+    preds = model.predict_net(x)
+    assert preds is not None
+    assert (model.predict(x) == model.predict_net(x, func=torch.sigmoid)).all()
