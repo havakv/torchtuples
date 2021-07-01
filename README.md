@@ -2,6 +2,7 @@
 
 [![Python package](https://github.com/havakv/torchtuples/workflows/Python%20package/badge.svg)](https://github.com/havakv/torchtuples/actions)
 [![PyPI](https://img.shields.io/pypi/v/torchtuples.svg)](https://pypi.org/project/torchtuples/)
+[![PyPI](https://anaconda.org/conda-forge/torchtuples/badges/version.svg)](https://anaconda.org/conda-forge/torchtuples)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/torchtuples.svg)
 [![License](https://img.shields.io/badge/License-BSD%202--Clause-orange.svg)](https://github.com/havakv/torchtuples/blob/master/LICENSE)
 
@@ -17,6 +18,10 @@ One of the main benefits of **torchtuples** is that it handles data in the form 
 Next, **torchtuples** can be installed with pip:
 ```bash
 pip install torchtuples
+```
+Or, via conda:
+```bash
+conda install -c conda-forge torchtuples
 ```
 For the bleeding edge version, install directly from github (consider adding `--force-reinstall`):
 ```bash
