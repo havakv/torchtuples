@@ -527,7 +527,7 @@ class Model(object):
             dl = input
         else:
             raise ValueError(
-                "Did not recognize data type. You can set `is_dataloader to `Ture`"
+                "Did not recognize data type. You can set `is_dataloader to `True`"
                 + " or `False` to force usage."
             )
 
