@@ -18,8 +18,8 @@ def test_tuplefy_not_list(inp, types):
     assert type(t[0]) is type(inp)
 
 
-@pytest.mark.parametrize("batch_size", [1, 3, 10, 12])
-@pytest.mark.parametrize("num_workers", [0, 1, 5])
+@pytest.mark.parametrize("batch_size", [1, 12])
+@pytest.mark.parametrize("num_workers", [0, 2])
 def test_make_data_loader_sorted(batch_size, num_workers):
     torch.manual_seed(123)
     a = tuplefy(torch.randn(10, 3), torch.randn(10))
@@ -30,8 +30,8 @@ def test_make_data_loader_sorted(batch_size, num_workers):
     assert_tupletree_equal(b.cat(), a)
 
 
-@pytest.mark.parametrize("batch_size", [1, 3, 10, 12])
-@pytest.mark.parametrize("num_workers", [0, 1, 5])
+@pytest.mark.parametrize("batch_size", [1, 12])
+@pytest.mark.parametrize("num_workers", [0, 2])
 def test_make_data_loader_unsorted(batch_size, num_workers):
     torch.manual_seed(123)
     a = tuplefy(torch.randn(10, 3), torch.randn(10))
