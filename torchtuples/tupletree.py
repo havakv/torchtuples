@@ -1,7 +1,10 @@
 import functools
 import itertools
+from typing import Any, Union
+
 import numpy as np
 import torch
+
 import torchtuples
 
 
@@ -309,7 +312,7 @@ def tuplefy(*data, types=(list, tuple), stop_at_tuple=True):
 
 
 @apply_leaf
-def to_device(data, device):
+def to_device(data: Any, device: Union[str, torch.device]) -> Any:
     """Move data to device
 
     Arguments:
@@ -319,8 +322,6 @@ def to_device(data, device):
     Returns:
         TupleTree, tensor -- Data moved to device
     """
-    if type(data) is not torch.Tensor:
-        raise RuntimeError(f"Need 'data' to be tensors, not {type(data)}.")
     return data.to(device)
 
 
