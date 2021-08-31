@@ -470,18 +470,19 @@ class Model(object):
             data = _get_element_in_dataloader(dataloader)
             if data is not None:
                 input = tuplefy(data)
-                input_train = self.fit_info["input"]
-                if input.to_levels() != input_train["levels"]:
-                    warnings.warn(
-                        """The input from the dataloader is different from
-                    the 'input' during trainig. Make sure to remove 'target' from dataloader.
-                    Can be done with 'torchtuples.data.dataloader_input_only'."""
-                    )
-                if input.shapes().apply(lambda x: x[1:]) != input_train["shapes"]:
-                    warnings.warn(
-                        """The input from the dataloader is different from
-                    the 'input' during trainig. The shapes are different."""
-                    )
+                input_train = self.fit_info.get("input")
+                if input_train is not None:
+                    if input.to_levels() != input_train.get("levels"):
+                        warnings.warn(
+                            """The input from the dataloader is different from
+                        the 'input' during trainig. Make sure to remove 'target' from dataloader.
+                        Can be done with 'torchtuples.data.dataloader_input_only'."""
+                        )
+                    if input.shapes().apply(lambda x: x[1:]) != input_train.get("shapes"):
+                        warnings.warn(
+                            """The input from the dataloader is different from
+                        the 'input' during trainig. The shapes are different."""
+                        )
 
         if eval_:
             self.net.eval()
