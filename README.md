@@ -101,9 +101,9 @@ model.fit(df_xtrain.values, y_train, batch_size, epochs, callbacks=[lr_adjust_ca
 
 
 
-#### Adaptive Learning Rate with ReduceLROnPlateauCallback
+#### ReduceLROnPlateau
 
-Here's how you use it:
+It's actually implementing the same method from torch, which can't be use in torchtuples directly. Here's how you use it:
 
 ```python
 optimizer = tt.optim.Adam(lr=0.001)
