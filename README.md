@@ -85,3 +85,37 @@ preds = model.predict_net(x)
 ```
 
 For more examples, see the [examples folder](https://github.com/havakv/torchtuples/tree/master/examples).
+
+
+
+### Dynamic Learning Rate Adjustment
+First, import the callbacks.
+
+```python
+from dynamic_lr import AdjustLRCallback, ReduceLROnPlateauCallback
+```
+
+In this method, you can use a custom callback named `AdjustLRCallback` to dynamically adjust the learning rate during training. Here's how you implement it:
+
+```python
+lr_adjust_callback = AdjustLRCallback(optimizer, step_size=100, gamma=0.1)
+model.fit(df_xtrain.values, y_train, batch_size, epochs, callbacks=[lr_adjust_callback])
+```
+
+- `AdjustLRCallback(optimizer, step_size=100, gamma=0.1)`: Create an instance of the `AdjustLRCallback` callback. The `optimizer` parameter is your optimizer instance, `step_size` determines the frequency of learning rate adjustments (every 100 epochs in this case), and `gamma` controls the magnitude of adjustment.
+
+
+
+#### ReduceLROnPlateau
+
+It's actually implementing the same method from torch, which can't be use in torchtuples directly. Here's how you use it:
+
+```python
+optimizer = tt.optim.Adam(lr=0.001)
+callbacks = ReduceLROnPlateauCallback(optimizer)
+model.fit(df_xtrain.values, y_train, batch_size, epochs, callbacks=[callbacks])
+```
+
+- `tt.optim.Adam(lr=0.001)`: Initialize the Adam optimizer with a learning rate of 0.001.
+
+- `ReduceLROnPlateauCallback(optimizer)`: Create an instance of the `ReduceLROnPlateauCallback` callback, passing the optimizer. It monitors validation loss and reduces the learning rate if loss improvement stagnates.
