@@ -90,7 +90,7 @@ For more examples, see the [examples folder](https://github.com/havakv/torchtupl
 
 ### Dynamic Learning Rate Adjustment
 
-In this method, you're using a custom callback named `AdjustLRCallback` to dynamically adjust the learning rate during training. Here's how you implement it:
+In this method, you can use a custom callback named `AdjustLRCallback` to dynamically adjust the learning rate during training. Here's how you implement it:
 
 ```python
 lr_adjust_callback = AdjustLRCallback(optimizer, step_size=100, gamma=0.1)
